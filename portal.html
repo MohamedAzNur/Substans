@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="da"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mit læringsrum — Substans</title><link rel="stylesheet" href="app.css"></head>
+<body><div id="loading" class="loading">Henter dit læringsrum…</div>
+<div id="app" class="shell" hidden>
+  <aside class="sidebar"><a class="brand" href="index.html">Substans</a><nav class="nav"><a class="active" href="portal.html">Overblik</a><a href="#">Mine lektioner</a><a href="#">Materialer</a><a href="#">Fremskridt</a></nav><div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div></aside>
+  <main class="main"><header class="topbar"><div><span id="roleLabel" class="eyebrow">Elev</span><h1 class="title">Assalamu alaikum, <span id="firstName">elev</span>.</h1><p class="muted">Her er dit overblik for denne uge.</p></div><span class="badge">Substans Campus</span></header>
+    <section class="grid"><article class="card stat"><span class="muted">Ugens fremmøde</span><strong>—</strong><small class="muted">Vises når lektioner er oprettet</small></article><article class="card stat"><span class="muted">Opgaver</span><strong>0</strong><small class="muted">Ingen åbne opgaver</small></article><article class="card stat"><span class="muted">Næste lektion</span><strong style="font-size:22px">Kommer snart</strong><small class="muted">Tidspunkt bliver vist her</small></article>
+      <article class="card wide"><span class="eyebrow">Denne uge</span><h2>Dit læringsforløb er klar til indhold</h2><p class="muted">Når administratoren opretter hold og lektioner, vises emner, materialer og feedback automatisk her.</p></article>
+      <article class="card"><span class="eyebrow">Næste skridt</span><div class="list"><div class="row"><span>Profil oprettet</span><span class="badge">Færdig</span></div><div class="row"><span>Holdtilknytning</span><span class="muted">Afventer</span></div><div class="row"><span>Første lektion</span><span class="muted">Afventer</span></div></div></article>
+    </section>
+  </main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="supabase-config.js"></script><script src="auth.js"></script>
+<script>(async()=>{const auth=await requireRole(["student","parent","teacher"]);if(!auth)return;const name=auth.profile.full_name||auth.session.user.email.split("@")[0];firstName.textContent=name.split(" ")[0];roleLabel.textContent={student:"Elev",parent:"Forælder",teacher:"Underviser"}[auth.profile.role]||"Campus";loading.remove();app.hidden=false})();</script></body></html>

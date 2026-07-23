@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="da"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Administration — Substans</title><link rel="stylesheet" href="app.css"></head>
+<body><div id="loading" class="loading">Henter administration…</div>
+<div id="app" class="shell" hidden>
+  <aside class="sidebar"><a class="brand" href="index.html">Substans</a><nav class="nav"><a class="active" href="admin.html">Ansøgninger</a><a href="#">Elever</a><a href="#">Hold</a><a href="#">Undervisere</a></nav><div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div></aside>
+  <main class="main"><header class="topbar"><div><span class="eyebrow">Administration</span><h1 class="title">Ansøgninger</h1><p class="muted">Behandl nye henvendelser og følg deres status.</p></div><span id="adminName" class="badge">Administrator</span></header>
+    <section class="grid"><article class="card stat"><span class="muted">Alle ansøgninger</span><strong id="total">—</strong></article><article class="card stat"><span class="muted">Nye</span><strong id="newCount">—</strong></article><article class="card stat"><span class="muted">Optaget</span><strong id="acceptedCount">—</strong></article></section>
+    <section class="card" style="margin-top:16px"><div class="table-wrap"><table class="table"><thead><tr><th>Dato</th><th>Forælder</th><th>Barn</th><th>Alder</th><th>Kontakt</th><th>Status</th></tr></thead><tbody id="rows"></tbody></table><div id="empty" class="empty" hidden>Ingen ansøgninger endnu.</div></div></section>
+  </main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="supabase-config.js"></script><script src="auth.js"></script>
+<script>
+  async function updateStatus(id,status){const {error}=await supabaseClient.from("applications").update({status}).eq("id",id);if(error)alert("Status kunne ikke gemmes.");else loadApplications()}
+  async function loadApplications(){const {data,error}=await supabaseClient.from("applications").select("*").order("created_at",{ascending:false});if(error){document.getElementById("rows").innerHTML='<tr><td colspan="6">Ansøgninger kunne ikke hentes. Kontrollér V3 SQL-opsætningen.</td></tr>';return}total.textContent=data.length;newCount.textContent=data.filter(x=>(x.status||"new")==="new").length;acceptedCount.textContent=data.filter(x=>x.status==="accepted").length;empty.hidden=data.length>0;rows.innerHTML=data.map(x=>`<tr><td>${new Date(x.created_at).toLocaleDateString("da-DK")}</td><td><b>${escapeHtml(x.parent_name)}</b><br><span class="muted">${escapeHtml(x.message)}</span></td><td>${escapeHtml(x.child_name)}</td><td>${escapeHtml(x.child_age)}</td><td>${escapeHtml(x.email)}<br>${escapeHtml(x.phone||"")}</td><td><select onchange="updateStatus('${x.id}',this.value)">${["new","contacted","accepted","rejected"].map(s=>`<option value="${s}" ${s===(x.status||"new")?"selected":""}>${{new:"Ny",contacted:"Kontaktet",accepted:"Optaget",rejected:"Afslået"}[s]}</option>`).join("")}</select></td></tr>`).join("")}
+  (async()=>{const auth=await requireRole(["admin"]);if(!auth)return;adminName.textContent=auth.profile.full_name||"Administrator";loading.remove();app.hidden=false;loadApplications()})();
+</script></body></html>

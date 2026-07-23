@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="da">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Log ind — Substans</title><link rel="stylesheet" href="app.css"></head>
+<body class="auth-page">
+  <main class="auth-card">
+    <a class="brand" href="index.html">Substans</a>
+    <span class="eyebrow">Campus</span>
+    <h1 class="title">Velkommen tilbage.</h1>
+    <p class="muted">Log ind for at se undervisning, fremskridt eller administration.</p>
+    <form id="loginForm">
+      <div class="field"><label for="email">E-mail</label><input id="email" type="email" autocomplete="email" required></div>
+      <div class="field"><label for="password">Adgangskode</label><input id="password" type="password" autocomplete="current-password" required></div>
+      <button id="loginButton" class="button" type="submit">Log ind</button>
+      <div id="status" class="status" role="status"></div>
+    </form>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="supabase-config.js"></script>
+  <script>
+    const form=document.getElementById("loginForm"),statusBox=document.getElementById("status"),button=document.getElementById("loginButton");
+    function show(message,type){statusBox.textContent=message;statusBox.className="status show "+type}
+    async function route(){const {data:{session}}=await supabaseClient.auth.getSession();if(!session)return;const {data:p}=await supabaseClient.from("profiles").select("role").eq("id",session.user.id).single();window.location.replace(p?.role==="admin"?"admin.html":"portal.html")}
+    route();
+    form.addEventListener("submit",async e=>{e.preventDefault();button.disabled=true;button.textContent="Logger ind…";const {error}=await supabaseClient.auth.signInWithPassword({email:email.value,password:password.value});if(error){show("E-mail eller adgangskode er forkert.","error");button.disabled=false;button.textContent="Log ind";return}await route()});
+  </script>
+</body></html>
