@@ -147,6 +147,41 @@ with check (public.is_admin());
 
 grant select, insert, update, delete on public.teachers to authenticated;
 
+-- Lektioner og fremmøde.
+create table if not exists public.lesson_sessions (
+  id uuid primary key default gen_random_uuid(),
+  class_id uuid not null references public.classes(id) on delete cascade,
+  lesson_date date not null,
+  topic text not null,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.attendance_records (
+  id uuid primary key default gen_random_uuid(),
+  lesson_id uuid not null references public.lesson_sessions(id) on delete cascade,
+  student_id uuid not null references public.students(id) on delete cascade,
+  status text not null check (status in ('present', 'absent', 'excused')),
+  updated_at timestamptz not null default now(),
+  unique (lesson_id, student_id)
+);
+
+alter table public.lesson_sessions enable row level security;
+alter table public.attendance_records enable row level security;
+
+drop policy if exists "Admins manage lesson sessions" on public.lesson_sessions;
+create policy "Admins manage lesson sessions" on public.lesson_sessions
+for all to authenticated using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "Admins manage attendance records" on public.attendance_records;
+create policy "Admins manage attendance records" on public.attendance_records
+for all to authenticated using (public.is_admin())
+with check (public.is_admin());
+
+grant select, insert, update, delete on public.lesson_sessions to authenticated;
+grant select, insert, update, delete on public.attendance_records to authenticated;
+
 -- Efter at din bruger er oprettet i Authentication, gør den til admin:
 -- update public.profiles set role = 'admin'
 -- where id = (select id from auth.users where email = 'DIN_EMAIL');

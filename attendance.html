@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Fremmøde — Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .attendance-layout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.85fr);gap:16px}
+    .lesson-card{display:grid;gap:14px}
+    .lesson-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+    .lesson-meta{display:flex;gap:8px;flex-wrap:wrap}
+    .lesson-meta span{padding:6px 9px;border-radius:999px;background:var(--brand-soft);color:var(--brand);font-size:12px;font-weight:750}
+    .section-title{margin:0;font-family:Georgia,serif;font-size:25px;font-weight:500}
+    .field select{padding:13px 14px;border:1px solid #cbd4cf;border-radius:11px;background:#fff}
+    .student-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+    .student-row:last-child{border-bottom:0}
+    .attendance-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+    .attendance-actions button{border:1px solid var(--line);background:#fff;padding:7px 9px;border-radius:9px;font-weight:750;cursor:pointer}
+    .attendance-actions button.active[data-status="present"]{background:#e7f6ef;border-color:#23845a;color:#176c49}
+    .attendance-actions button.active[data-status="absent"]{background:#fff0ef;border-color:#c94c44;color:#a43d36}
+    .attendance-actions button.active[data-status="excused"]{background:#fff7df;border-color:#c68d1c;color:#966810}
+    @media(max-width:950px){.attendance-layout{grid-template-columns:1fr}}
+    @media(max-width:620px){.student-row{grid-template-columns:1fr}.attendance-actions{justify-content:flex-start}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Henter fremmøde…</div>
+
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="index.html">Substans</a>
+      <nav class="nav">
+        <a href="admin.html">Ansøgninger</a>
+        <a href="students.html">Elever</a>
+        <a href="classes.html">Hold</a>
+        <a href="teachers.html">Undervisere</a>
+        <a class="active" href="attendance.html">Fremmøde</a>
+      </nav>
+      <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <span class="eyebrow">Administration</span>
+          <h1 class="title">Lektioner og fremmøde</h1>
+          <p class="muted">Opret undervisningsgange og registrér elevernes fremmøde.</p>
+        </div>
+        <span id="adminName" class="badge">Administrator</span>
+      </header>
+
+      <section class="grid">
+        <article class="card stat"><span class="muted">Lektioner</span><strong id="lessonCount">—</strong></article>
+        <article class="card stat"><span class="muted">Til stede</span><strong id="presentCount">—</strong></article>
+        <article class="card stat"><span class="muted">Fraværende</span><strong id="absentCount">—</strong></article>
+      </section>
+
+      <div class="attendance-layout" style="margin-top:16px">
+        <section class="list">
+          <form id="lessonForm" class="card">
+            <h2 class="section-title">Opret lektion</h2>
+            <div class="field"><label for="classId">Hold</label><select id="classId" required></select></div>
+            <div class="field"><label for="lessonDate">Dato</label><input id="lessonDate" type="date" required></div>
+            <div class="field"><label for="topic">Emne</label><input id="topic" required placeholder="F.eks. Sīrah: Hijrah"></div>
+            <div class="field"><label for="notes">Noter</label><textarea id="notes" rows="3" placeholder="Valgfri note om lektionen"></textarea></div>
+            <button id="createLessonButton" class="button" type="submit">Opret lektion</button>
+            <div id="lessonStatus" class="status" role="status"></div>
+          </form>
+          <div id="lessonList" class="list"></div>
+        </section>
+
+        <aside id="attendancePanel" class="card">
+          <span class="eyebrow">Fremmøde</span>
+          <h2 id="attendanceTitle" class="section-title">Vælg en lektion</h2>
+          <p id="attendanceHint" class="muted">Åbn en lektion for at registrere eleverne.</p>
+          <div id="studentList"></div>
+          <div id="attendanceStatus" class="status" role="status"></div>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    let classes = [];
+    let students = [];
+    let enrollments = [];
+    let lessons = [];
+    let attendance = [];
+    let selectedLessonId = null;
+
+    function label(status) {
+      return { present:"Til stede", absent:"Fraværende", excused:"Meldt fravær" }[status] || status;
+    }
+
+    function showStatus(target, message, type) {
+      target.textContent = message;
+      target.className = "status show " + type;
+    }
+
+    function renderLessons() {
+      lessonCount.textContent = lessons.length;
+      presentCount.textContent = attendance.filter(item => item.status === "present").length;
+      absentCount.textContent = attendance.filter(item => item.status === "absent").length;
+
+      classId.innerHTML = classes.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
+      createLessonButton.disabled = !classes.length;
+
+      lessonList.innerHTML = lessons.length ? lessons.map(lesson => {
+        const lessonClass = classes.find(item => item.id === lesson.class_id);
+        const records = attendance.filter(item => item.lesson_id === lesson.id);
+        return `<article class="card lesson-card">
+          <div class="lesson-head">
+            <div><span class="eyebrow">${escapeHtml(lessonClass?.name || "Hold")}</span><h2 class="section-title">${escapeHtml(lesson.topic)}</h2></div>
+            <span class="badge">${escapeHtml(new Date(lesson.lesson_date + "T12:00:00").toLocaleDateString("da-DK"))}</span>
+          </div>
+          <div class="lesson-meta">
+            <span>${records.filter(item => item.status === "present").length} til stede</span>
+            <span>${records.filter(item => item.status === "absent").length} fraværende</span>
+          </div>
+          ${lesson.notes ? `<p class="muted">${escapeHtml(lesson.notes)}</p>` : ""}
+          <button class="button secondary" type="button" data-lesson-id="${escapeHtml(lesson.id)}">Registrér fremmøde</button>
+        </article>`;
+      }).join("") : '<article class="card empty">Opret den første lektion for at komme i gang.</article>';
+    }
+
+    function renderAttendance() {
+      const lesson = lessons.find(item => item.id === selectedLessonId);
+      if (!lesson) return;
+      const lessonClass = classes.find(item => item.id === lesson.class_id);
+      const memberIds = enrollments.filter(item => item.class_id === lesson.class_id).map(item => item.student_id);
+      const members = students.filter(item => memberIds.includes(item.id));
+      attendanceTitle.textContent = lesson.topic;
+      attendanceHint.textContent = `${lessonClass?.name || "Hold"} · ${new Date(lesson.lesson_date + "T12:00:00").toLocaleDateString("da-DK")}`;
+      studentList.innerHTML = members.length ? members.map(student => {
+        const record = attendance.find(item => item.lesson_id === lesson.id && item.student_id === student.id);
+        return `<div class="student-row">
+          <strong>${escapeHtml(student.full_name)}</strong>
+          <div class="attendance-actions">
+            ${["present","absent","excused"].map(status => `<button type="button" class="${record?.status === status ? "active" : ""}" data-student-id="${escapeHtml(student.id)}" data-status="${status}">${label(status)}</button>`).join("")}
+          </div>
+        </div>`;
+      }).join("") : '<p class="muted">Der er endnu ingen elever på dette hold.</p>';
+    }
+
+    async function loadData() {
+      const [classResult, studentResult, enrollmentResult, lessonResult, attendanceResult] = await Promise.all([
+        supabaseClient.from("classes").select("*").order("name"),
+        supabaseClient.from("students").select("*").order("full_name"),
+        supabaseClient.from("class_enrollments").select("*"),
+        supabaseClient.from("lesson_sessions").select("*").order("lesson_date", { ascending:false }),
+        supabaseClient.from("attendance_records").select("*")
+      ]);
+      if ([classResult,studentResult,enrollmentResult,lessonResult,attendanceResult].some(result => result.error)) {
+        lessonList.innerHTML = '<article class="card empty">Fremmøde kunne ikke hentes. Kontrollér modulets databaseopsætning.</article>';
+        return;
+      }
+      classes = classResult.data || [];
+      students = studentResult.data || [];
+      enrollments = enrollmentResult.data || [];
+      lessons = lessonResult.data || [];
+      attendance = attendanceResult.data || [];
+      renderLessons();
+      if (selectedLessonId) renderAttendance();
+    }
+
+    lessonForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      createLessonButton.disabled = true;
+      createLessonButton.textContent = "Opretter…";
+      const { error } = await supabaseClient.from("lesson_sessions").insert({
+        class_id: classId.value,
+        lesson_date: lessonDate.value,
+        topic: topic.value.trim(),
+        notes: notes.value.trim() || null
+      });
+      if (error) {
+        showStatus(lessonStatus, "Lektionen kunne ikke oprettes.", "error");
+      } else {
+        lessonForm.reset();
+        lessonDate.valueAsDate = new Date();
+        showStatus(lessonStatus, "Lektionen er oprettet.", "success");
+        await loadData();
+      }
+      createLessonButton.disabled = !classes.length;
+      createLessonButton.textContent = "Opret lektion";
+    });
+
+    lessonList.addEventListener("click", event => {
+      const button = event.target.closest("button[data-lesson-id]");
+      if (!button) return;
+      selectedLessonId = button.dataset.lessonId;
+      renderAttendance();
+    });
+
+    studentList.addEventListener("click", async event => {
+      const button = event.target.closest("button[data-student-id]");
+      if (!button || !selectedLessonId) return;
+      button.disabled = true;
+      const { error } = await supabaseClient.from("attendance_records").upsert({
+        lesson_id: selectedLessonId,
+        student_id: button.dataset.studentId,
+        status: button.dataset.status,
+        updated_at: new Date().toISOString()
+      }, { onConflict:"lesson_id,student_id" });
+      if (error) showStatus(attendanceStatus, "Fremmødet kunne ikke gemmes.", "error");
+      else {
+        showStatus(attendanceStatus, "Fremmødet er gemt.", "success");
+        await loadData();
+      }
+    });
+
+    (async () => {
+      const auth = await requireRole(["admin"]);
+      if (!auth) return;
+      adminName.textContent = auth.profile.full_name || "Administrator";
+      lessonDate.valueAsDate = new Date();
+      loading.remove();
+      app.hidden = false;
+      loadData();
+    })();
+  </script>
+</body>
+</html>
