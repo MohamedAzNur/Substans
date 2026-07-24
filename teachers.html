@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Undervisere — Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .teacher-layout{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,.7fr);gap:16px}
+    .teacher-card{display:grid;gap:15px}
+    .teacher-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+    .teacher-contact{display:flex;gap:8px;flex-wrap:wrap}
+    .teacher-contact span{padding:6px 9px;border-radius:999px;background:var(--brand-soft);color:var(--brand);font-size:12px;font-weight:750}
+    .teacher-actions{display:flex;gap:8px;flex-wrap:wrap}
+    .teacher-actions button{border:1px solid var(--line);background:#fff;color:var(--ink);padding:8px 10px;border-radius:9px;font-weight:750;cursor:pointer}
+    .teacher-actions button:hover{border-color:var(--brand);color:var(--brand)}
+    .section-title{margin:0;font-family:Georgia,serif;font-size:25px;font-weight:500}
+    .field select{padding:13px 14px;border:1px solid #cbd4cf;border-radius:11px;background:#fff}
+    @media(max-width:950px){.teacher-layout{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Henter undervisere…</div>
+
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="index.html">Substans</a>
+      <nav class="nav">
+        <a href="admin.html">Ansøgninger</a>
+        <a href="students.html">Elever</a>
+        <a href="classes.html">Hold</a>
+        <a class="active" href="teachers.html">Undervisere</a>
+      </nav>
+      <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <span class="eyebrow">Administration</span>
+          <h1 class="title">Undervisere</h1>
+          <p class="muted">Administrér undervisere og deres hold.</p>
+        </div>
+        <span id="adminName" class="badge">Administrator</span>
+      </header>
+
+      <section class="grid">
+        <article class="card stat"><span class="muted">Aktive undervisere</span><strong id="activeCount">—</strong></article>
+        <article class="card stat"><span class="muted">Inviterede</span><strong id="invitedCount">—</strong></article>
+        <article class="card stat"><span class="muted">Tilknyttede hold</span><strong id="assignedCount">—</strong></article>
+      </section>
+
+      <div class="teacher-layout" style="margin-top:16px">
+        <section id="teacherList" class="list"></section>
+
+        <aside class="list">
+          <form id="teacherForm" class="card">
+            <h2 class="section-title">Opret underviser</h2>
+            <div class="field"><label for="fullName">Navn</label><input id="fullName" required placeholder="Underviserens fulde navn"></div>
+            <div class="field"><label for="email">E-mail</label><input id="email" type="email" required placeholder="navn@eksempel.dk"></div>
+            <div class="field"><label for="phone">Telefon</label><input id="phone" type="tel" placeholder="+45 12 34 56 78"></div>
+            <div class="field"><label for="bio">Kort præsentation</label><textarea id="bio" rows="4" placeholder="Faglig baggrund og undervisningserfaring"></textarea></div>
+            <div class="field"><label for="status">Status</label>
+              <select id="status"><option value="active">Aktiv</option><option value="invited">Inviteret</option><option value="paused">På pause</option></select>
+            </div>
+            <button id="createButton" class="button" type="submit">Opret underviser</button>
+            <div id="formStatus" class="status" role="status"></div>
+          </form>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    let teachers = [];
+    let classes = [];
+
+    function showStatus(message, type) {
+      formStatus.textContent = message;
+      formStatus.className = "status show " + type;
+    }
+
+    function statusLabel(status) {
+      return { active:"Aktiv", invited:"Inviteret", paused:"På pause" }[status] || status;
+    }
+
+    function render() {
+      activeCount.textContent = teachers.filter(item => item.status === "active").length;
+      invitedCount.textContent = teachers.filter(item => item.status === "invited").length;
+      assignedCount.textContent = classes.filter(item => item.teacher_id).length;
+
+      teacherList.innerHTML = teachers.length ? teachers.map(teacher => {
+        const teacherClasses = classes.filter(item => item.teacher_id === teacher.id);
+        const nextStatus = teacher.status === "active" ? "paused" : "active";
+        return `<article class="card teacher-card">
+          <div class="teacher-head">
+            <div><span class="eyebrow">Underviser</span><h2 class="section-title">${escapeHtml(teacher.full_name)}</h2></div>
+            <span class="badge">${escapeHtml(statusLabel(teacher.status))}</span>
+          </div>
+          <div class="teacher-contact">
+            <span>${escapeHtml(teacher.email)}</span>
+            ${teacher.phone ? `<span>${escapeHtml(teacher.phone)}</span>` : ""}
+          </div>
+          ${teacher.bio ? `<p class="muted">${escapeHtml(teacher.bio)}</p>` : ""}
+          <div><strong>Hold:</strong> <span class="muted">${teacherClasses.length ? teacherClasses.map(item => escapeHtml(item.name)).join(", ") : "Ingen hold endnu"}</span></div>
+          <div class="teacher-actions">
+            <button type="button" data-teacher-id="${escapeHtml(teacher.id)}" data-status="${nextStatus}">${nextStatus === "paused" ? "Sæt på pause" : "Aktivér"}</button>
+          </div>
+        </article>`;
+      }).join("") : '<article class="card empty">Opret den første underviser for at komme i gang.</article>';
+    }
+
+    async function loadData() {
+      const [teacherResult, classResult] = await Promise.all([
+        supabaseClient.from("teachers").select("*").order("full_name"),
+        supabaseClient.from("classes").select("id,name,teacher_id").order("name")
+      ]);
+
+      if (teacherResult.error || classResult.error) {
+        teacherList.innerHTML = '<article class="card empty">Underviserne kunne ikke hentes. Kontrollér modulets databaseopsætning.</article>';
+        return;
+      }
+      teachers = teacherResult.data || [];
+      classes = classResult.data || [];
+      render();
+    }
+
+    teacherForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      createButton.disabled = true;
+      createButton.textContent = "Opretter…";
+      const { error } = await supabaseClient.from("teachers").insert({
+        full_name: fullName.value.trim(),
+        email: email.value.trim().toLowerCase(),
+        phone: phone.value.trim() || null,
+        bio: bio.value.trim() || null,
+        status: status.value
+      });
+
+      if (error) {
+        showStatus("Underviseren kunne ikke oprettes.", "error");
+      } else {
+        teacherForm.reset();
+        showStatus("Underviseren er oprettet.", "success");
+        await loadData();
+      }
+      createButton.disabled = false;
+      createButton.textContent = "Opret underviser";
+    });
+
+    teacherList.addEventListener("click", async event => {
+      const button = event.target.closest("button[data-teacher-id]");
+      if (!button) return;
+      button.disabled = true;
+      const { error } = await supabaseClient.from("teachers").update({ status:button.dataset.status }).eq("id", button.dataset.teacherId);
+      if (error) alert("Status kunne ikke ændres.");
+      await loadData();
+    });
+
+    (async () => {
+      const auth = await requireRole(["admin"]);
+      if (!auth) return;
+      adminName.textContent = auth.profile.full_name || "Administrator";
+      loading.remove();
+      app.hidden = false;
+      loadData();
+    })();
+  </script>
+</body>
+</html>

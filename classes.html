@@ -32,7 +32,7 @@
         <a href="admin.html">Ansøgninger</a>
         <a href="students.html">Elever</a>
         <a class="active" href="classes.html">Hold</a>
-        <a href="#">Undervisere</a>
+        <a href="teachers.html">Undervisere</a>
       </nav>
       <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
     </aside>
@@ -67,7 +67,7 @@
               </select>
             </div>
             <div class="field"><label for="startTime">Starttid</label><input id="startTime" type="time"></div>
-            <div class="field"><label for="teacherName">Underviser</label><input id="teacherName" placeholder="Navn fastlægges senere"></div>
+            <div class="field"><label for="teacherSelect">Underviser</label><select id="teacherSelect"><option value="">Ikke tilknyttet</option></select></div>
             <div class="field"><label for="capacity">Maks. elever</label><input id="capacity" type="number" min="1" max="100" value="30" required></div>
             <button id="createClassButton" class="button" type="submit">Opret hold</button>
             <div id="classStatus" class="status" role="status"></div>
@@ -92,6 +92,7 @@
     let classes = [];
     let students = [];
     let enrollments = [];
+    let teachers = [];
 
     function showStatus(target, message, type) {
       target.textContent = message;
@@ -122,7 +123,7 @@
           <div class="class-meta">
             <span>${escapeHtml(item.weekday || "Dag ikke fastlagt")}</span>
             <span>${item.start_time ? escapeHtml(item.start_time.slice(0,5)) : "Tid ikke fastlagt"}</span>
-            <span>${escapeHtml(item.teacher_name || "Underviser ikke fastlagt")}</span>
+            <span>${escapeHtml(teachers.find(teacher => teacher.id === item.teacher_id)?.full_name || item.teacher_name || "Underviser ikke fastlagt")}</span>
           </div>
           <div class="capacity"><span style="width:${percentage}%"></span></div>
           <div>${members.length ? members.map(enrollment => {
@@ -134,13 +135,14 @@
     }
 
     async function loadData() {
-      const [classResult, studentResult, enrollmentResult] = await Promise.all([
+      const [classResult, studentResult, enrollmentResult, teacherResult] = await Promise.all([
         supabaseClient.from("classes").select("*").order("created_at", { ascending:true }),
         supabaseClient.from("students").select("*").eq("status", "active").order("full_name"),
-        supabaseClient.from("class_enrollments").select("*").order("created_at")
+        supabaseClient.from("class_enrollments").select("*").order("created_at"),
+        supabaseClient.from("teachers").select("*").eq("status", "active").order("full_name")
       ]);
 
-      if (classResult.error || studentResult.error || enrollmentResult.error) {
+      if (classResult.error || studentResult.error || enrollmentResult.error || teacherResult.error) {
         classList.innerHTML = '<article class="card empty">Hold kunne ikke hentes. Kontrollér holdmodulets databaseopsætning.</article>';
         return;
       }
@@ -148,6 +150,8 @@
       classes = classResult.data || [];
       students = studentResult.data || [];
       enrollments = enrollmentResult.data || [];
+      teachers = teacherResult.data || [];
+      teacherSelect.innerHTML = '<option value="">Ikke tilknyttet</option>' + teachers.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.full_name)}</option>`).join("");
       render();
     }
 
@@ -159,7 +163,8 @@
         name: className.value.trim(),
         weekday: weekday.value || null,
         start_time: startTime.value || null,
-        teacher_name: teacherName.value.trim() || null,
+        teacher_id: teacherSelect.value || null,
+        teacher_name: teachers.find(item => item.id === teacherSelect.value)?.full_name || null,
         capacity: Number(capacity.value),
         status: "active"
       });

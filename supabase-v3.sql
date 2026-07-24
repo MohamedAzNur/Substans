@@ -124,6 +124,29 @@ with check (public.is_admin());
 grant select, insert, update, delete on public.classes to authenticated;
 grant select, insert, delete on public.class_enrollments to authenticated;
 
+-- Undervisere og deres tilknytning til hold.
+create table if not exists public.teachers (
+  id uuid primary key default gen_random_uuid(),
+  full_name text not null,
+  email text not null,
+  phone text,
+  bio text,
+  status text not null default 'active' check (status in ('active', 'invited', 'paused')),
+  created_at timestamptz not null default now()
+);
+
+alter table public.classes
+add column if not exists teacher_id uuid references public.teachers(id) on delete set null;
+
+alter table public.teachers enable row level security;
+
+drop policy if exists "Admins manage teachers" on public.teachers;
+create policy "Admins manage teachers" on public.teachers
+for all to authenticated using (public.is_admin())
+with check (public.is_admin());
+
+grant select, insert, update, delete on public.teachers to authenticated;
+
 -- Efter at din bruger er oprettet i Authentication, gør den til admin:
 -- update public.profiles set role = 'admin'
 -- where id = (select id from auth.users where email = 'DIN_EMAIL');
