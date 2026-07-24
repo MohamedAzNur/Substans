@@ -1,25 +1,141 @@
 <!doctype html>
 <html lang="da">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Log ind — Substans</title><link rel="stylesheet" href="app.css"></head>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Log ind — Substans</title>
+  <link rel="stylesheet" href="app.css">
+</head>
 <body class="auth-page">
   <main class="auth-card">
     <a class="brand" href="index.html">Substans</a>
     <span class="eyebrow">Campus</span>
     <h1 class="title">Velkommen tilbage.</h1>
     <p class="muted">Log ind for at se undervisning, fremskridt eller administration.</p>
+
     <form id="loginForm">
-      <div class="field"><label for="email">E-mail</label><input id="email" type="email" autocomplete="email" required></div>
-      <div class="field"><label for="password">Adgangskode</label><input id="password" type="password" autocomplete="current-password" required></div>
-      <button id="loginButton" class="button" type="submit">Log ind</button>
+      <div class="field">
+        <label for="email">E-mail</label>
+        <input id="email" type="email" autocomplete="email" required>
+      </div>
+      <div class="field">
+        <label for="password">Adgangskode</label>
+        <input id="password" type="password" autocomplete="current-password" required>
+      </div>
+      <button id="loginButton" class="button auth-action" type="submit">Log ind</button>
+      <button id="forgotButton" class="text-button" type="button">Glemt adgangskode?</button>
       <div id="status" class="status" role="status"></div>
     </form>
+
+    <form id="recoveryForm" hidden>
+      <p class="muted">Skriv din e-mail, så sender vi et sikkert link til at vælge en ny adgangskode.</p>
+      <div class="field">
+        <label for="recoveryEmail">E-mail</label>
+        <input id="recoveryEmail" type="email" autocomplete="email" required>
+      </div>
+      <button id="recoveryButton" class="button auth-action" type="submit">Send nyt link</button>
+      <button id="backButton" class="text-button" type="button">Tilbage til login</button>
+      <div id="recoveryStatus" class="status" role="status"></div>
+    </form>
   </main>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="supabase-config.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
   <script>
-    const form=document.getElementById("loginForm"),statusBox=document.getElementById("status"),button=document.getElementById("loginButton");
-    function show(message,type){statusBox.textContent=message;statusBox.className="status show "+type}
-    async function route(){const {data:{session}}=await supabaseClient.auth.getSession();if(!session)return;const {data:p}=await supabaseClient.from("profiles").select("role").eq("id",session.user.id).single();window.location.replace(p?.role==="admin"?"admin.html":"portal.html")}
+    const loginForm = document.getElementById("loginForm");
+    const recoveryForm = document.getElementById("recoveryForm");
+    const emailInput = document.getElementById("email");
+    const passwordInput = document.getElementById("password");
+    const recoveryEmail = document.getElementById("recoveryEmail");
+    const statusBox = document.getElementById("status");
+    const recoveryStatus = document.getElementById("recoveryStatus");
+    const loginButton = document.getElementById("loginButton");
+    const recoveryButton = document.getElementById("recoveryButton");
+
+    function show(target, message, type) {
+      target.textContent = message;
+      target.className = "status show " + type;
+    }
+
+    function openRecovery() {
+      recoveryEmail.value = emailInput.value;
+      loginForm.hidden = true;
+      recoveryForm.hidden = false;
+      recoveryEmail.focus();
+    }
+
+    function closeRecovery() {
+      recoveryForm.hidden = true;
+      loginForm.hidden = false;
+      recoveryStatus.className = "status";
+      recoveryStatus.textContent = "";
+      emailInput.focus();
+    }
+
+    async function route() {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session) return;
+      const { data: profile } = await supabaseClient
+        .from("profiles")
+        .select("role")
+        .eq("id", session.user.id)
+        .single();
+      window.location.replace(profile?.role === "admin" ? "admin.html" : "portal.html");
+    }
+
     route();
-    form.addEventListener("submit",async e=>{e.preventDefault();button.disabled=true;button.textContent="Logger ind…";const {error}=await supabaseClient.auth.signInWithPassword({email:email.value,password:password.value});if(error){show("E-mail eller adgangskode er forkert.","error");button.disabled=false;button.textContent="Log ind";return}await route()});
+
+    loginForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      loginButton.disabled = true;
+      loginButton.textContent = "Logger ind…";
+
+      const { error } = await supabaseClient.auth.signInWithPassword({
+        email: emailInput.value,
+        password: passwordInput.value
+      });
+
+      if (error) {
+        show(statusBox, "E-mail eller adgangskode er forkert.", "error");
+        loginButton.disabled = false;
+        loginButton.textContent = "Log ind";
+        return;
+      }
+
+      await route();
+    });
+
+    document.getElementById("forgotButton").addEventListener("click", openRecovery);
+    document.getElementById("backButton").addEventListener("click", closeRecovery);
+
+    recoveryForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      recoveryButton.disabled = true;
+      recoveryButton.textContent = "Sender…";
+
+      const redirectTo = new URL("reset-password.html", window.location.href).href;
+      const { error } = await supabaseClient.auth.resetPasswordForEmail(
+        recoveryEmail.value,
+        { redirectTo }
+      );
+
+      if (error) {
+        const message = error.status === 429
+          ? "Der er sendt for mange mails. Vent lidt og prøv igen."
+          : "Mailen kunne ikke sendes lige nu. Prøv igen om lidt.";
+        show(recoveryStatus, message, "error");
+        recoveryButton.disabled = false;
+        recoveryButton.textContent = "Send nyt link";
+        return;
+      }
+
+      show(
+        recoveryStatus,
+        "Hvis e-mailen findes hos Substans, er et nyt link sendt. Tjek også spam.",
+        "success"
+      );
+      recoveryButton.textContent = "Link sendt";
+    });
   </script>
-</body></html>
+</body>
+</html>
