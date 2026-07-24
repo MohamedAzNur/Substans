@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Elever — Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .student-tools{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+    .student-tools input,.student-tools select{min-height:44px;border:1px solid var(--line);border-radius:12px;background:#fff;padding:10px 13px;color:var(--ink)}
+    .student-tools input{flex:1;min-width:220px}
+    .contact-links{display:grid;gap:4px}
+    .contact-links a{color:var(--brand);font-weight:700}
+    @media(max-width:620px){.table th:nth-child(3),.table td:nth-child(3){display:none}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Henter elever…</div>
+
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="index.html">Substans</a>
+      <nav class="nav">
+        <a href="admin.html">Ansøgninger</a>
+        <a class="active" href="students.html">Elever</a>
+        <a href="#">Hold</a>
+        <a href="#">Undervisere</a>
+      </nav>
+      <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <span class="eyebrow">Administration</span>
+          <h1 class="title">Elever</h1>
+          <p class="muted">Se og administrér de børn, der er optaget hos Substans.</p>
+        </div>
+        <span id="adminName" class="badge">Administrator</span>
+      </header>
+
+      <section class="grid">
+        <article class="card stat"><span class="muted">Alle elever</span><strong id="total">—</strong></article>
+        <article class="card stat"><span class="muted">Aktive</span><strong id="activeCount">—</strong></article>
+        <article class="card stat"><span class="muted">Venteliste</span><strong id="waitingCount">—</strong></article>
+      </section>
+
+      <section class="card" style="margin-top:16px">
+        <div class="student-tools">
+          <input id="searchInput" type="search" placeholder="Søg efter elev eller forælder">
+          <select id="statusFilter" aria-label="Filtrér efter status">
+            <option value="all">Alle statusser</option>
+            <option value="active">Aktive</option>
+            <option value="waiting">Venteliste</option>
+            <option value="paused">På pause</option>
+          </select>
+        </div>
+
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Elev</th><th>Alder</th><th>Forælder</th><th>Kontakt</th><th>Status</th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+          <div id="empty" class="empty" hidden>Ingen elever matcher dit valg.</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    const statusLabels = {active:"Aktiv",waiting:"Venteliste",paused:"På pause"};
+    let students = [];
+
+    function matches(student) {
+      const query = searchInput.value.trim().toLowerCase();
+      const selectedStatus = statusFilter.value;
+      const searchable = [student.full_name, student.parent_name, student.parent_email, student.parent_phone].join(" ").toLowerCase();
+      return (selectedStatus === "all" || student.status === selectedStatus) && (!query || searchable.includes(query));
+    }
+
+    function renderStudents() {
+      total.textContent = students.length;
+      activeCount.textContent = students.filter(student => student.status === "active").length;
+      waitingCount.textContent = students.filter(student => student.status === "waiting").length;
+
+      const visible = students.filter(matches);
+      empty.hidden = visible.length > 0;
+      rows.innerHTML = visible.map(student => `<tr>
+        <td><b>${escapeHtml(student.full_name)}</b><br><span class="muted">Oprettet ${new Date(student.created_at).toLocaleDateString("da-DK")}</span></td>
+        <td>${escapeHtml(student.age || "—")}</td>
+        <td>${escapeHtml(student.parent_name)}</td>
+        <td class="contact-links"><a href="mailto:${encodeURIComponent(student.parent_email)}">${escapeHtml(student.parent_email)}</a>${student.parent_phone ? `<a href="tel:${encodeURIComponent(student.parent_phone)}">${escapeHtml(student.parent_phone)}</a>` : ""}</td>
+        <td><select aria-label="Status for ${escapeHtml(student.full_name)}" data-id="${escapeHtml(student.id)}">${Object.entries(statusLabels).map(([value,label]) => `<option value="${value}" ${value === student.status ? "selected" : ""}>${label}</option>`).join("")}</select></td>
+      </tr>`).join("");
+    }
+
+    async function updateStudentStatus(id, status) {
+      const { error } = await supabaseClient.from("students").update({ status }).eq("id", id);
+      if (error) {
+        alert("Elevens status kunne ikke gemmes.");
+        return;
+      }
+      const student = students.find(item => item.id === id);
+      if (student) student.status = status;
+      renderStudents();
+    }
+
+    async function loadStudents() {
+      const { data, error } = await supabaseClient.from("students").select("*").order("created_at", { ascending:false });
+      if (error) {
+        rows.innerHTML = '<tr><td colspan="5">Elever kunne ikke hentes. Kontrollér elevmodulets databaseopsætning.</td></tr>';
+        return;
+      }
+      students = data || [];
+      renderStudents();
+    }
+
+    searchInput.addEventListener("input", renderStudents);
+    statusFilter.addEventListener("change", renderStudents);
+    rows.addEventListener("change", event => {
+      const select = event.target.closest("select[data-id]");
+      if (select) updateStudentStatus(select.dataset.id, select.value);
+    });
+
+    (async () => {
+      const auth = await requireRole(["admin"]);
+      if (!auth) return;
+      adminName.textContent = auth.profile.full_name || "Administrator";
+      loading.remove();
+      app.hidden = false;
+      loadStudents();
+    })();
+  </script>
+</body>
+</html>

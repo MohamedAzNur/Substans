@@ -66,6 +66,28 @@ with check (public.is_admin());
 grant select on public.profiles to authenticated;
 grant select, update on public.applications to authenticated;
 
+-- Elever oprettes af administratoren fra godkendte ansøgninger.
+create table if not exists public.students (
+  id uuid primary key default gen_random_uuid(),
+  application_id bigint unique references public.applications(id) on delete set null,
+  full_name text not null,
+  age integer check (age between 5 and 17),
+  parent_name text not null,
+  parent_email text not null,
+  parent_phone text,
+  status text not null default 'active' check (status in ('active', 'waiting', 'paused')),
+  created_at timestamptz not null default now()
+);
+
+alter table public.students enable row level security;
+
+drop policy if exists "Admins manage students" on public.students;
+create policy "Admins manage students" on public.students
+for all to authenticated using (public.is_admin())
+with check (public.is_admin());
+
+grant select, insert, update on public.students to authenticated;
+
 -- Efter at din bruger er oprettet i Authentication, gør den til admin:
 -- update public.profiles set role = 'admin'
 -- where id = (select id from auth.users where email = 'DIN_EMAIL');

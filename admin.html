@@ -32,7 +32,7 @@
       <a class="brand" href="index.html">Substans</a>
       <nav class="nav">
         <a class="active" href="admin.html">Ansøgninger</a>
-        <a href="#">Elever</a>
+        <a href="students.html">Elever</a>
         <a href="#">Hold</a>
         <a href="#">Undervisere</a>
       </nav>
@@ -159,10 +159,42 @@
         </div>
         <div class="detail"><small>Besked</small><div class="detail-message">${escapeHtml(application.message || "Ingen besked")}</div></div>
         <div class="field"><label for="drawerStatus">Status</label><select id="drawerStatus">${Object.entries(statusLabels).map(([value,label]) => `<option value="${value}" ${value === status ? "selected" : ""}>${label}</option>`).join("")}</select></div>
+        ${status === "accepted" ? `<button id="createStudentButton" class="button" type="button">Opret som elev</button><div id="studentStatus" class="status" role="status"></div>` : ""}
       `;
       drawerBackdrop.hidden = false;
       drawer.hidden = false;
       document.getElementById("drawerStatus").addEventListener("change", event => updateStatus(id, event.target.value));
+      const createStudentButton = document.getElementById("createStudentButton");
+      if (createStudentButton) createStudentButton.addEventListener("click", () => createStudent(application));
+    }
+
+    async function createStudent(application) {
+      const button = document.getElementById("createStudentButton");
+      const statusBox = document.getElementById("studentStatus");
+      button.disabled = true;
+      button.textContent = "Opretter…";
+
+      const { error } = await supabaseClient.from("students").upsert({
+        application_id: application.id,
+        full_name: application.child_name,
+        age: application.child_age,
+        parent_name: application.parent_name,
+        parent_email: application.email,
+        parent_phone: application.phone || null,
+        status: "active"
+      }, { onConflict: "application_id" });
+
+      if (error) {
+        statusBox.textContent = "Eleven kunne ikke oprettes. Kontrollér elevmodulets databaseopsætning.";
+        statusBox.className = "status show error";
+        button.disabled = false;
+        button.textContent = "Opret som elev";
+        return;
+      }
+
+      statusBox.textContent = "Eleven er oprettet og kan nu ses under Elever.";
+      statusBox.className = "status show success";
+      button.textContent = "Elev oprettet";
     }
 
     function closeApplication() {
