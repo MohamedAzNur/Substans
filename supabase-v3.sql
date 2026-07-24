@@ -88,6 +88,42 @@ with check (public.is_admin());
 
 grant select, insert, update on public.students to authenticated;
 
+-- Hold og elevtilknytninger.
+create table if not exists public.classes (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  weekday text,
+  start_time time,
+  capacity integer not null default 30 check (capacity between 1 and 100),
+  teacher_name text,
+  status text not null default 'active' check (status in ('active', 'planned', 'paused')),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.class_enrollments (
+  id uuid primary key default gen_random_uuid(),
+  class_id uuid not null references public.classes(id) on delete cascade,
+  student_id uuid not null references public.students(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (class_id, student_id)
+);
+
+alter table public.classes enable row level security;
+alter table public.class_enrollments enable row level security;
+
+drop policy if exists "Admins manage classes" on public.classes;
+create policy "Admins manage classes" on public.classes
+for all to authenticated using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "Admins manage class enrollments" on public.class_enrollments;
+create policy "Admins manage class enrollments" on public.class_enrollments
+for all to authenticated using (public.is_admin())
+with check (public.is_admin());
+
+grant select, insert, update, delete on public.classes to authenticated;
+grant select, insert, delete on public.class_enrollments to authenticated;
+
 -- Efter at din bruger er oprettet i Authentication, gør den til admin:
 -- update public.profiles set role = 'admin'
 -- where id = (select id from auth.users where email = 'DIN_EMAIL');

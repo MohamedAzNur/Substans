@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Hold — Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .class-layout{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,.7fr);gap:16px}
+    .class-card{display:grid;gap:16px}
+    .class-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+    .class-meta{display:flex;gap:8px;flex-wrap:wrap}
+    .class-meta span{padding:6px 9px;border-radius:999px;background:var(--brand-soft);color:var(--brand);font-size:12px;font-weight:750}
+    .capacity{height:8px;background:#e8edea;border-radius:999px;overflow:hidden}
+    .capacity span{display:block;height:100%;background:var(--brand);border-radius:inherit}
+    .member{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+    .member:last-child{border-bottom:0}
+    .remove-button{border:0;background:transparent;color:var(--danger);font-weight:750;cursor:pointer}
+    .form-actions{display:grid;gap:10px}
+    .field select{padding:13px 14px;border:1px solid #cbd4cf;border-radius:11px;background:#fff}
+    .section-title{margin:0;font-family:Georgia,serif;font-size:25px;font-weight:500}
+    @media(max-width:950px){.class-layout{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Henter hold…</div>
+
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="index.html">Substans</a>
+      <nav class="nav">
+        <a href="admin.html">Ansøgninger</a>
+        <a href="students.html">Elever</a>
+        <a class="active" href="classes.html">Hold</a>
+        <a href="#">Undervisere</a>
+      </nav>
+      <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <span class="eyebrow">Administration</span>
+          <h1 class="title">Hold</h1>
+          <p class="muted">Opret hold og fordel eleverne.</p>
+        </div>
+        <span id="adminName" class="badge">Administrator</span>
+      </header>
+
+      <section class="grid">
+        <article class="card stat"><span class="muted">Aktive hold</span><strong id="classCount">—</strong></article>
+        <article class="card stat"><span class="muted">Tilknyttede elever</span><strong id="enrollmentCount">—</strong></article>
+        <article class="card stat"><span class="muted">Ledige pladser</span><strong id="availableCount">—</strong></article>
+      </section>
+
+      <div class="class-layout" style="margin-top:16px">
+        <section id="classList" class="list"></section>
+
+        <aside class="list">
+          <form id="classForm" class="card">
+            <h2 class="section-title">Opret nyt hold</h2>
+            <div class="field"><label for="className">Navn</label><input id="className" required placeholder="F.eks. Hold 1"></div>
+            <div class="field"><label for="weekday">Undervisningsdag</label>
+              <select id="weekday">
+                <option value="">Ikke fastlagt</option>
+                <option>Mandag</option><option>Tirsdag</option><option>Onsdag</option><option>Torsdag</option><option>Fredag</option><option>Lørdag</option><option>Søndag</option>
+              </select>
+            </div>
+            <div class="field"><label for="startTime">Starttid</label><input id="startTime" type="time"></div>
+            <div class="field"><label for="teacherName">Underviser</label><input id="teacherName" placeholder="Navn fastlægges senere"></div>
+            <div class="field"><label for="capacity">Maks. elever</label><input id="capacity" type="number" min="1" max="100" value="30" required></div>
+            <button id="createClassButton" class="button" type="submit">Opret hold</button>
+            <div id="classStatus" class="status" role="status"></div>
+          </form>
+
+          <form id="enrollmentForm" class="card">
+            <h2 class="section-title">Tilføj elev til hold</h2>
+            <div class="field"><label for="studentSelect">Elev</label><select id="studentSelect" required></select></div>
+            <div class="field"><label for="classSelect">Hold</label><select id="classSelect" required></select></div>
+            <button id="enrollButton" class="button" type="submit">Tilføj elev</button>
+            <div id="enrollmentStatus" class="status" role="status"></div>
+          </form>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    let classes = [];
+    let students = [];
+    let enrollments = [];
+
+    function showStatus(target, message, type) {
+      target.textContent = message;
+      target.className = "status show " + type;
+    }
+
+    function render() {
+      const activeClasses = classes.filter(item => item.status === "active");
+      classCount.textContent = activeClasses.length;
+      enrollmentCount.textContent = enrollments.length;
+      availableCount.textContent = activeClasses.reduce((sum,item) => {
+        const used = enrollments.filter(enrollment => enrollment.class_id === item.id).length;
+        return sum + Math.max(0, item.capacity - used);
+      }, 0);
+
+      classSelect.innerHTML = classes.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
+      studentSelect.innerHTML = students.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.full_name)}</option>`).join("");
+      enrollButton.disabled = !classes.length || !students.length;
+
+      classList.innerHTML = classes.length ? classes.map(item => {
+        const members = enrollments.filter(enrollment => enrollment.class_id === item.id);
+        const percentage = Math.min(100, Math.round((members.length / item.capacity) * 100));
+        return `<article class="card class-card">
+          <div class="class-head">
+            <div><span class="eyebrow">Hold</span><h2 class="section-title">${escapeHtml(item.name)}</h2></div>
+            <span class="badge">${members.length} / ${item.capacity}</span>
+          </div>
+          <div class="class-meta">
+            <span>${escapeHtml(item.weekday || "Dag ikke fastlagt")}</span>
+            <span>${item.start_time ? escapeHtml(item.start_time.slice(0,5)) : "Tid ikke fastlagt"}</span>
+            <span>${escapeHtml(item.teacher_name || "Underviser ikke fastlagt")}</span>
+          </div>
+          <div class="capacity"><span style="width:${percentage}%"></span></div>
+          <div>${members.length ? members.map(enrollment => {
+            const student = students.find(entry => entry.id === enrollment.student_id);
+            return `<div class="member"><span>${escapeHtml(student?.full_name || "Ukendt elev")}</span><button class="remove-button" type="button" data-enrollment-id="${escapeHtml(enrollment.id)}">Fjern</button></div>`;
+          }).join("") : '<p class="muted">Ingen elever på holdet endnu.</p>'}</div>
+        </article>`;
+      }).join("") : '<article class="card empty">Opret det første hold for at komme i gang.</article>';
+    }
+
+    async function loadData() {
+      const [classResult, studentResult, enrollmentResult] = await Promise.all([
+        supabaseClient.from("classes").select("*").order("created_at", { ascending:true }),
+        supabaseClient.from("students").select("*").eq("status", "active").order("full_name"),
+        supabaseClient.from("class_enrollments").select("*").order("created_at")
+      ]);
+
+      if (classResult.error || studentResult.error || enrollmentResult.error) {
+        classList.innerHTML = '<article class="card empty">Hold kunne ikke hentes. Kontrollér holdmodulets databaseopsætning.</article>';
+        return;
+      }
+
+      classes = classResult.data || [];
+      students = studentResult.data || [];
+      enrollments = enrollmentResult.data || [];
+      render();
+    }
+
+    classForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      createClassButton.disabled = true;
+      createClassButton.textContent = "Opretter…";
+      const { error } = await supabaseClient.from("classes").insert({
+        name: className.value.trim(),
+        weekday: weekday.value || null,
+        start_time: startTime.value || null,
+        teacher_name: teacherName.value.trim() || null,
+        capacity: Number(capacity.value),
+        status: "active"
+      });
+
+      if (error) {
+        showStatus(classStatus, "Holdet kunne ikke oprettes.", "error");
+      } else {
+        classForm.reset();
+        capacity.value = "30";
+        showStatus(classStatus, "Holdet er oprettet.", "success");
+        await loadData();
+      }
+      createClassButton.disabled = false;
+      createClassButton.textContent = "Opret hold";
+    });
+
+    enrollmentForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      const selectedClass = classes.find(item => item.id === classSelect.value);
+      const used = enrollments.filter(item => item.class_id === classSelect.value).length;
+      if (selectedClass && used >= selectedClass.capacity) {
+        showStatus(enrollmentStatus, "Holdet har ikke flere ledige pladser.", "error");
+        return;
+      }
+
+      enrollButton.disabled = true;
+      enrollButton.textContent = "Tilføjer…";
+      const { error } = await supabaseClient.from("class_enrollments").insert({
+        class_id: classSelect.value,
+        student_id: studentSelect.value
+      });
+
+      if (error) {
+        showStatus(enrollmentStatus, error.code === "23505" ? "Eleven er allerede på dette hold." : "Eleven kunne ikke tilføjes.", "error");
+      } else {
+        showStatus(enrollmentStatus, "Eleven er tilføjet til holdet.", "success");
+        await loadData();
+      }
+      enrollButton.disabled = false;
+      enrollButton.textContent = "Tilføj elev";
+    });
+
+    classList.addEventListener("click", async event => {
+      const button = event.target.closest("button[data-enrollment-id]");
+      if (!button) return;
+      button.disabled = true;
+      const { error } = await supabaseClient.from("class_enrollments").delete().eq("id", button.dataset.enrollmentId);
+      if (error) alert("Eleven kunne ikke fjernes fra holdet.");
+      await loadData();
+    });
+
+    (async () => {
+      const auth = await requireRole(["admin"]);
+      if (!auth) return;
+      adminName.textContent = auth.profile.full_name || "Administrator";
+      loading.remove();
+      app.hidden = false;
+      loadData();
+    })();
+  </script>
+</body>
+</html>
