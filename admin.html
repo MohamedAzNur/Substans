@@ -1,16 +1,212 @@
 <!doctype html>
-<html lang="da"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Administration — Substans</title><link rel="stylesheet" href="app.css"></head>
-<body><div id="loading" class="loading">Henter administration…</div>
-<div id="app" class="shell" hidden>
-  <aside class="sidebar"><a class="brand" href="index.html">Substans</a><nav class="nav"><a class="active" href="admin.html">Ansøgninger</a><a href="#">Elever</a><a href="#">Hold</a><a href="#">Undervisere</a></nav><div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div></aside>
-  <main class="main"><header class="topbar"><div><span class="eyebrow">Administration</span><h1 class="title">Ansøgninger</h1><p class="muted">Behandl nye henvendelser og følg deres status.</p></div><span id="adminName" class="badge">Administrator</span></header>
-    <section class="grid"><article class="card stat"><span class="muted">Alle ansøgninger</span><strong id="total">—</strong></article><article class="card stat"><span class="muted">Nye</span><strong id="newCount">—</strong></article><article class="card stat"><span class="muted">Optaget</span><strong id="acceptedCount">—</strong></article></section>
-    <section class="card" style="margin-top:16px"><div class="table-wrap"><table class="table"><thead><tr><th>Dato</th><th>Forælder</th><th>Barn</th><th>Alder</th><th>Kontakt</th><th>Status</th></tr></thead><tbody id="rows"></tbody></table><div id="empty" class="empty" hidden>Ingen ansøgninger endnu.</div></div></section>
-  </main>
-</div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="supabase-config.js"></script><script src="auth.js"></script>
-<script>
-  async function updateStatus(id,status){const {error}=await supabaseClient.from("applications").update({status}).eq("id",id);if(error)alert("Status kunne ikke gemmes.");else loadApplications()}
-  async function loadApplications(){const {data,error}=await supabaseClient.from("applications").select("*").order("created_at",{ascending:false});if(error){document.getElementById("rows").innerHTML='<tr><td colspan="6">Ansøgninger kunne ikke hentes. Kontrollér V3 SQL-opsætningen.</td></tr>';return}total.textContent=data.length;newCount.textContent=data.filter(x=>(x.status||"new")==="new").length;acceptedCount.textContent=data.filter(x=>x.status==="accepted").length;empty.hidden=data.length>0;rows.innerHTML=data.map(x=>`<tr><td>${new Date(x.created_at).toLocaleDateString("da-DK")}</td><td><b>${escapeHtml(x.parent_name)}</b><br><span class="muted">${escapeHtml(x.message)}</span></td><td>${escapeHtml(x.child_name)}</td><td>${escapeHtml(x.child_age)}</td><td>${escapeHtml(x.email)}<br>${escapeHtml(x.phone||"")}</td><td><select onchange="updateStatus('${x.id}',this.value)">${["new","contacted","accepted","rejected"].map(s=>`<option value="${s}" ${s===(x.status||"new")?"selected":""}>${{new:"Ny",contacted:"Kontaktet",accepted:"Optaget",rejected:"Afslået"}[s]}</option>`).join("")}</select></td></tr>`).join("")}
-  (async()=>{const auth=await requireRole(["admin"]);if(!auth)return;adminName.textContent=auth.profile.full_name||"Administrator";loading.remove();app.hidden=false;loadApplications()})();
-</script></body></html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Administration — Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .admin-tools{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+    .admin-tools input,.admin-tools select{min-height:44px;border:1px solid var(--line);border-radius:12px;background:#fff;padding:10px 13px;color:var(--ink)}
+    .admin-tools input{flex:1;min-width:220px}
+    .application-row{cursor:pointer}
+    .application-row:hover{background:#f7f9f7}
+    .contact-links{display:grid;gap:4px}
+    .contact-links a{color:var(--brand);font-weight:700}
+    .drawer-backdrop{position:fixed;inset:0;background:rgba(10,25,20,.42);z-index:20}
+    .drawer{position:fixed;top:0;right:0;z-index:21;width:min(520px,100%);height:100vh;overflow:auto;background:#fff;padding:30px;box-shadow:-20px 0 70px rgba(10,25,20,.18)}
+    .drawer-head{display:flex;justify-content:space-between;gap:20px;align-items:flex-start}
+    .icon-button{border:1px solid var(--line);background:#fff;width:40px;height:40px;border-radius:50%;cursor:pointer;font-size:22px}
+    .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:24px 0}
+    .detail{border:1px solid var(--line);border-radius:14px;padding:14px}
+    .detail small{display:block;color:var(--muted);margin-bottom:5px}
+    .detail-message{white-space:pre-wrap}
+    @media(max-width:620px){.detail-grid{grid-template-columns:1fr}.drawer{padding:22px}.table th:nth-child(4),.table td:nth-child(4){display:none}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Henter administration…</div>
+
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="index.html">Substans</a>
+      <nav class="nav">
+        <a class="active" href="admin.html">Ansøgninger</a>
+        <a href="#">Elever</a>
+        <a href="#">Hold</a>
+        <a href="#">Undervisere</a>
+      </nav>
+      <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <span class="eyebrow">Administration</span>
+          <h1 class="title">Ansøgninger</h1>
+          <p class="muted">Behandl nye henvendelser og følg deres status.</p>
+        </div>
+        <span id="adminName" class="badge">Administrator</span>
+      </header>
+
+      <section class="grid">
+        <article class="card stat"><span class="muted">Alle ansøgninger</span><strong id="total">—</strong></article>
+        <article class="card stat"><span class="muted">Nye</span><strong id="newCount">—</strong></article>
+        <article class="card stat"><span class="muted">Optaget</span><strong id="acceptedCount">—</strong></article>
+      </section>
+
+      <section class="card" style="margin-top:16px">
+        <div class="admin-tools">
+          <input id="searchInput" type="search" placeholder="Søg efter barn, forælder eller e-mail">
+          <select id="statusFilter" aria-label="Filtrér efter status">
+            <option value="all">Alle statusser</option>
+            <option value="new">Nye</option>
+            <option value="contacted">Kontaktet</option>
+            <option value="accepted">Optaget</option>
+            <option value="rejected">Afslået</option>
+          </select>
+        </div>
+
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Dato</th><th>Forælder</th><th>Barn</th><th>Alder</th><th>Kontakt</th><th>Status</th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+          <div id="empty" class="empty" hidden>Ingen ansøgninger matcher dit valg.</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="drawerBackdrop" class="drawer-backdrop" hidden></div>
+  <aside id="drawer" class="drawer" aria-label="Ansøgningsdetaljer" hidden>
+    <div class="drawer-head">
+      <div>
+        <span class="eyebrow">Ansøgning</span>
+        <h2 id="detailChild" class="title" style="font-size:38px"></h2>
+      </div>
+      <button id="closeDrawer" class="icon-button" type="button" aria-label="Luk">×</button>
+    </div>
+    <div id="detailContent"></div>
+  </aside>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    const statusLabels = {new:"Ny",contacted:"Kontaktet",accepted:"Optaget",rejected:"Afslået"};
+    let applications = [];
+
+    async function updateStatus(id, status) {
+      const { error } = await supabaseClient.from("applications").update({ status }).eq("id", id);
+      if (error) {
+        alert("Status kunne ikke gemmes.");
+        return;
+      }
+      const application = applications.find(item => String(item.id) === String(id));
+      if (application) application.status = status;
+      renderApplications();
+      if (!drawer.hidden && drawer.dataset.id === String(id)) openApplication(id);
+    }
+
+    function applicationMatches(application) {
+      const status = application.status || "new";
+      const selectedStatus = statusFilter.value;
+      const query = searchInput.value.trim().toLowerCase();
+      const searchable = [
+        application.parent_name,
+        application.child_name,
+        application.email,
+        application.phone
+      ].join(" ").toLowerCase();
+      return (selectedStatus === "all" || status === selectedStatus) && (!query || searchable.includes(query));
+    }
+
+    function renderApplications() {
+      total.textContent = applications.length;
+      newCount.textContent = applications.filter(item => (item.status || "new") === "new").length;
+      acceptedCount.textContent = applications.filter(item => item.status === "accepted").length;
+
+      const visible = applications.filter(applicationMatches);
+      empty.hidden = visible.length > 0;
+      rows.innerHTML = visible.map(application => {
+        const status = application.status || "new";
+        return `<tr class="application-row" data-id="${escapeHtml(application.id)}">
+          <td>${new Date(application.created_at).toLocaleDateString("da-DK")}</td>
+          <td><b>${escapeHtml(application.parent_name)}</b></td>
+          <td>${escapeHtml(application.child_name)}</td>
+          <td>${escapeHtml(application.child_age)}</td>
+          <td class="contact-links"><a href="mailto:${encodeURIComponent(application.email)}">${escapeHtml(application.email)}</a>${application.phone ? `<a href="tel:${encodeURIComponent(application.phone)}">${escapeHtml(application.phone)}</a>` : ""}</td>
+          <td><select aria-label="Status for ${escapeHtml(application.child_name)}" data-status-id="${escapeHtml(application.id)}">${Object.entries(statusLabels).map(([value,label]) => `<option value="${value}" ${value === status ? "selected" : ""}>${label}</option>`).join("")}</select></td>
+        </tr>`;
+      }).join("");
+    }
+
+    function openApplication(id) {
+      const application = applications.find(item => String(item.id) === String(id));
+      if (!application) return;
+      const status = application.status || "new";
+      drawer.dataset.id = String(id);
+      detailChild.textContent = application.child_name;
+      detailContent.innerHTML = `
+        <div class="detail-grid">
+          <div class="detail"><small>Forælder</small><strong>${escapeHtml(application.parent_name)}</strong></div>
+          <div class="detail"><small>Barnets alder</small><strong>${escapeHtml(application.child_age)} år</strong></div>
+          <div class="detail"><small>E-mail</small><a href="mailto:${encodeURIComponent(application.email)}">${escapeHtml(application.email)}</a></div>
+          <div class="detail"><small>Telefon</small>${application.phone ? `<a href="tel:${encodeURIComponent(application.phone)}">${escapeHtml(application.phone)}</a>` : "Ikke oplyst"}</div>
+          <div class="detail"><small>Ønsket tidspunkt</small>${escapeHtml(application.preferred_time || "Ikke oplyst")}</div>
+          <div class="detail"><small>Modtaget</small>${new Date(application.created_at).toLocaleString("da-DK")}</div>
+        </div>
+        <div class="detail"><small>Besked</small><div class="detail-message">${escapeHtml(application.message || "Ingen besked")}</div></div>
+        <div class="field"><label for="drawerStatus">Status</label><select id="drawerStatus">${Object.entries(statusLabels).map(([value,label]) => `<option value="${value}" ${value === status ? "selected" : ""}>${label}</option>`).join("")}</select></div>
+      `;
+      drawerBackdrop.hidden = false;
+      drawer.hidden = false;
+      document.getElementById("drawerStatus").addEventListener("change", event => updateStatus(id, event.target.value));
+    }
+
+    function closeApplication() {
+      drawer.hidden = true;
+      drawerBackdrop.hidden = true;
+      delete drawer.dataset.id;
+    }
+
+    async function loadApplications() {
+      const { data, error } = await supabaseClient.from("applications").select("*").order("created_at", { ascending:false });
+      if (error) {
+        rows.innerHTML = '<tr><td colspan="6">Ansøgninger kunne ikke hentes. Kontrollér V3 SQL-opsætningen.</td></tr>';
+        return;
+      }
+      applications = data || [];
+      renderApplications();
+    }
+
+    searchInput.addEventListener("input", renderApplications);
+    statusFilter.addEventListener("change", renderApplications);
+    rows.addEventListener("click", event => {
+      const select = event.target.closest("select[data-status-id]");
+      if (select) return;
+      const row = event.target.closest("tr[data-id]");
+      if (row) openApplication(row.dataset.id);
+    });
+    rows.addEventListener("change", event => {
+      const select = event.target.closest("select[data-status-id]");
+      if (select) updateStatus(select.dataset.statusId, select.value);
+    });
+    closeDrawer.addEventListener("click", closeApplication);
+    drawerBackdrop.addEventListener("click", closeApplication);
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape" && !drawer.hidden) closeApplication();
+    });
+
+    (async () => {
+      const auth = await requireRole(["admin"]);
+      if (!auth) return;
+      adminName.textContent = auth.profile.full_name || "Administrator";
+      loading.remove();
+      app.hidden = false;
+      loadApplications();
+    })();
+  </script>
+</body>
+</html>
