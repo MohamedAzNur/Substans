@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Elevrapport · Substans</title><link rel="stylesheet" href="app.css">
+  <style>
+    .report-controls{display:flex;gap:10px;align-items:end;flex-wrap:wrap}.report-controls label{display:grid;gap:6px;font-weight:750;min-width:270px}.report-controls select{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff;font:inherit}
+    .report{display:grid;gap:16px;margin-top:16px}.report-hero{background:linear-gradient(135deg,#fff,#edf4ef)}.report-hero h2{font-family:Georgia,serif;font-size:34px;font-weight:500;margin:5px 0}
+    .report-section h2{font-family:Georgia,serif;font-size:27px;font-weight:500;margin:4px 0 14px}.report-list{display:grid;gap:10px}.report-row{padding:13px;border:1px solid var(--line);border-radius:12px;background:#fafcfb}
+    .subject-row{display:grid;grid-template-columns:130px 1fr 70px;gap:12px;align-items:center}.bar{height:8px;background:#e7ece8;border-radius:99px;overflow:hidden}.bar span{display:block;height:100%;background:var(--brand)}
+    .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}.empty-note{color:var(--muted);padding:12px 0}
+    @media(max-width:900px){.two-col{grid-template-columns:1fr}.subject-row{grid-template-columns:90px 1fr 45px}}
+    @media print{.sidebar,.report-controls,.topbar .badge,.no-print{display:none!important}.shell{display:block}.main{padding:0}.card{box-shadow:none;break-inside:avoid}.report{margin:0}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Åbner elevrapporter…</div>
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar"><a class="brand" href="index.html">Substans</a><nav class="nav">
+      <a href="admin.html">Ansøgninger</a><a href="students.html">Elever</a><a href="classes.html">Hold</a><a href="teachers.html">Undervisere</a><a href="attendance.html">Fremmøde</a>
+      <a href="resources.html">Materialer</a><a href="feedback.html">Feedback</a><a href="messages.html">Beskeder</a><a href="payments.html">Betalinger</a><a href="calendar.html">Kalender</a><a href="progress.html">Udvikling</a>
+      <a class="active" href="reports.html">Rapporter</a><a href="accounts.html">Kontoadgang</a>
+    </nav><div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div></aside>
+    <main class="main">
+      <header class="topbar"><div><span class="eyebrow">Samlet overblik</span><h1 class="title">Elevrapporter</h1><p class="muted">Se hele elevens rejse på én rolig og overskuelig side.</p></div><span class="badge">Substans Campus</span></header>
+      <section class="card report-controls no-print"><label>Vælg elev<select id="studentSelect"><option value="">Vælg elev</option></select></label><button id="printButton" class="button secondary" type="button" disabled>Udskriv / gem som PDF</button></section>
+      <section id="report" class="report"><article class="card empty">Vælg en elev for at åbne rapporten.</article></section>
+    </main>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="supabase-config.js"></script><script src="auth.js"></script>
+  <script>
+    let students=[],classes=[],enrollments=[],lessons=[],attendance=[],feedback=[],progress=[],payments=[];
+    const esc=escapeHtml, money=v=>new Intl.NumberFormat("da-DK",{style:"currency",currency:"DKK"}).format(Number(v||0));
+    function renderStudent(id){
+      const student=students.find(x=>x.id===id);if(!student){report.innerHTML='<article class="card empty">Vælg en elev for at åbne rapporten.</article>';printButton.disabled=true;return;}
+      const classIds=enrollments.filter(x=>x.student_id===id).map(x=>x.class_id),studentClasses=classes.filter(x=>classIds.includes(x.id));
+      const records=attendance.filter(x=>x.student_id===id),present=records.filter(x=>x.status==="present").length,attendanceRate=records.length?Math.round(present/records.length*100):0;
+      const studentFeedback=feedback.filter(x=>x.student_id===id),studentProgress=progress.filter(x=>x.student_id===id),studentPayments=payments.filter(x=>x.student_id===id);
+      const unpaid=studentPayments.filter(x=>x.status!=="paid").reduce((s,x)=>s+Number(x.amount),0);
+      const subjectLatest={};studentProgress.forEach(x=>{if(!subjectLatest[x.subject])subjectLatest[x.subject]=x;});
+      report.innerHTML=`<article class="card report-hero"><span class="eyebrow">Elevrapport · ${new Date().toLocaleDateString("da-DK")}</span><h2>${esc(student.full_name)}</h2><p class="muted">${student.age?`${student.age} år · `:""}${studentClasses.map(x=>esc(x.name)).join(", ")||"Ikke tilknyttet et hold"}</p></article>
+      <section class="grid"><article class="card stat"><span class="muted">Fremmøde</span><strong>${records.length?attendanceRate+"%":"—"}</strong></article><article class="card stat"><span class="muted">Vurderinger</span><strong>${studentProgress.length}</strong></article><article class="card stat"><span class="muted">Udestående</span><strong style="font-size:22px">${money(unpaid)}</strong></article></section>
+      <section class="two-col"><article class="card report-section"><span class="eyebrow">Faglig udvikling</span><h2>Seneste niveau</h2><div class="report-list">${Object.values(subjectLatest).length?Object.values(subjectLatest).map(x=>`<div class="subject-row"><b>${esc(x.subject)}</b><div><div>${esc(x.skill)}</div><div class="bar"><span style="width:${x.level*20}%"></span></div></div><strong>${x.level}/5</strong></div>`).join(""):'<p class="empty-note">Ingen vurderinger endnu.</p>'}</div></article>
+      <article class="card report-section"><span class="eyebrow">Betaling</span><h2>Status</h2><div class="report-list">${studentPayments.length?studentPayments.slice(0,5).map(x=>`<div class="report-row"><b>${esc(x.description)}</b><br><span class="muted">${money(x.amount)} · ${x.status==="paid"?"Betalt":"Afventer"}</span></div>`).join(""):'<p class="empty-note">Ingen betalinger endnu.</p>'}</div></article></section>
+      <article class="card report-section"><span class="eyebrow">Underviserens blik</span><h2>Seneste feedback</h2><div class="report-list">${studentFeedback.length?studentFeedback.slice(0,5).map(x=>`<div class="report-row"><b>${esc(x.focus)}</b><p>${esc(x.feedback_text)}</p>${x.next_step?`<span class="muted"><b>Næste skridt:</b> ${esc(x.next_step)}</span>`:""}</div>`).join(""):'<p class="empty-note">Ingen feedback endnu.</p>'}</div></article>`;
+      printButton.disabled=false;
+    }
+    async function load(){
+      const results=await Promise.all([supabaseClient.from("students").select("*").order("full_name"),supabaseClient.from("classes").select("*"),supabaseClient.from("class_enrollments").select("*"),supabaseClient.from("lesson_sessions").select("*"),supabaseClient.from("attendance_records").select("*"),supabaseClient.from("student_feedback").select("*").order("created_at",{ascending:false}),supabaseClient.from("student_progress").select("*").order("created_at",{ascending:false}),supabaseClient.from("student_payments").select("*").order("created_at",{ascending:false})]);
+      const error=results.find(x=>x.error)?.error;if(error){report.innerHTML=`<article class="card empty">${esc(error.message)}</article>`;return;}
+      [students,classes,enrollments,lessons,attendance,feedback,progress,payments]=results.map(x=>x.data||[]);
+      studentSelect.innerHTML='<option value="">Vælg elev</option>'+students.map(x=>`<option value="${x.id}">${esc(x.full_name)}</option>`).join("");
+    }
+    studentSelect.addEventListener("change",()=>renderStudent(studentSelect.value));printButton.addEventListener("click",()=>window.print());
+    (async()=>{const auth=await requireRole(["admin"]);if(!auth)return;loading.remove();app.hidden=false;await load();})();
+  </script>
+</body></html>
