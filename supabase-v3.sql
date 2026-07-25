@@ -331,6 +331,27 @@ for select to authenticated using (public.can_access_class(class_id));
 
 grant select, insert, update, delete on public.class_messages to authenticated;
 
+-- Skolebetalinger og familiens betalingsoverblik.
+create table if not exists public.student_payments (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid not null references public.students(id) on delete cascade,
+  description text not null,
+  amount numeric(10,2) not null check (amount > 0),
+  due_date date not null,
+  status text not null default 'pending' check (status in ('pending','paid','cancelled')),
+  paid_at timestamptz,
+  notes text,
+  created_at timestamptz not null default now()
+);
+alter table public.student_payments enable row level security;
+drop policy if exists "Admins manage student payments" on public.student_payments;
+create policy "Admins manage student payments" on public.student_payments for all to authenticated
+using (public.is_admin()) with check (public.is_admin());
+drop policy if exists "Families read own payments" on public.student_payments;
+create policy "Families read own payments" on public.student_payments for select to authenticated
+using (student_id in (select public.current_student_ids()));
+grant select,insert,update,delete on public.student_payments to authenticated;
+
 -- Privat filområde til materialer og lektier. Filer åbnes via tidsbegrænsede links.
 insert into storage.buckets (id, name, public, file_size_limit)
 values ('learning-attachments', 'learning-attachments', false, 52428800)

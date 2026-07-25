@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Betalinger · Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .payment-layout{display:grid;grid-template-columns:minmax(320px,.7fr) minmax(0,1.3fr);gap:16px}
+    .form-grid{display:grid;gap:14px}.form-grid label{display:grid;gap:7px;font-weight:750}
+    .form-grid input,.form-grid select,.form-grid textarea{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff;font:inherit}
+    .payment-list{display:grid;gap:12px}.payment-card{display:grid;gap:12px}
+    .payment-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+    .payment-head h2{font-family:Georgia,serif;font-weight:500;font-size:24px;margin:3px 0}
+    .amount{font-family:Georgia,serif;font-size:27px;color:var(--brand)}
+    .status-paid{background:#e6f4ea;color:#26653a}.status-overdue{background:#fde9e7;color:#9b3027}.status-pending{background:#fff2df;color:#8a5300}
+    .actions{display:flex;gap:8px;flex-wrap:wrap}.danger{color:#a33;border-color:#ead2d2}
+    @media(max-width:900px){.payment-layout{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Åbner betalinger…</div>
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="index.html">Substans</a>
+      <nav class="nav">
+        <a href="admin.html">Ansøgninger</a><a href="students.html">Elever</a><a href="classes.html">Hold</a>
+        <a href="teachers.html">Undervisere</a><a href="attendance.html">Fremmøde</a><a href="resources.html">Materialer</a>
+        <a href="feedback.html">Feedback</a><a href="messages.html">Beskeder</a>
+        <a class="active" href="payments.html">Betalinger</a><a href="accounts.html">Kontoadgang</a>
+      </nav>
+      <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div><span class="eyebrow">Administration</span><h1 class="title">Betalingsoverblik</h1><p class="muted">Opret og følg skolebetalinger uden regneark.</p></div>
+        <span class="badge">Substans Campus</span>
+      </header>
+      <section class="grid">
+        <article class="card stat"><span class="muted">Afventer</span><strong id="pendingCount">—</strong></article>
+        <article class="card stat"><span class="muted">Forfaldne</span><strong id="overdueCount">—</strong></article>
+        <article class="card stat"><span class="muted">Betalt i alt</span><strong id="paidTotal" style="font-size:23px">—</strong></article>
+      </section>
+      <section class="payment-layout" style="margin-top:16px">
+        <article class="card">
+          <span class="eyebrow">Ny opkrævning</span><h2 style="font-family:Georgia,serif;font-size:28px;font-weight:500">Opret betaling</h2>
+          <form id="paymentForm" class="form-grid">
+            <label>Elev<select id="studentId" required><option value="">Vælg elev</option></select></label>
+            <label>Beskrivelse<input id="description" required maxlength="160" placeholder="Fx Skolebetaling · august"></label>
+            <label>Beløb i kr.<input id="amount" required type="number" min="1" step="0.01" placeholder="500"></label>
+            <label>Betalingsfrist<input id="dueDate" required type="date"></label>
+            <label>Note<textarea id="notes" maxlength="1000" rows="4" placeholder="Valgfri intern note"></textarea></label>
+            <button id="saveButton" class="button" type="submit">Opret betaling</button><p id="formMessage" class="muted" role="status"></p>
+          </form>
+        </article>
+        <div>
+          <div class="topbar" style="margin-bottom:12px"><div><span class="eyebrow">Historik</span><h2 style="margin:4px 0">Alle betalinger</h2></div></div>
+          <div id="paymentList" class="payment-list"><article class="card empty">Indlæser betalinger…</article></div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="supabase-config.js"></script><script src="auth.js"></script>
+  <script>
+    let students=[],payments=[];
+    const money=value=>new Intl.NumberFormat("da-DK",{style:"currency",currency:"DKK"}).format(Number(value||0));
+    const studentName=id=>students.find(item=>item.id===id)?.full_name||"Elev";
+    function effectiveStatus(item){return item.status==="paid"?"paid":(item.due_date<new Date().toISOString().slice(0,10)?"overdue":"pending");}
+    function statusLabel(status){return {paid:"Betalt",overdue:"Forfalden",pending:"Afventer"}[status];}
+    function render(){
+      pendingCount.textContent=payments.filter(item=>effectiveStatus(item)==="pending").length;
+      overdueCount.textContent=payments.filter(item=>effectiveStatus(item)==="overdue").length;
+      paidTotal.textContent=money(payments.filter(item=>item.status==="paid").reduce((sum,item)=>sum+Number(item.amount),0));
+      paymentList.innerHTML=payments.length?payments.map(item=>{const status=effectiveStatus(item);return `
+        <article class="card payment-card">
+          <div class="payment-head"><div><span class="eyebrow">${escapeHtml(studentName(item.student_id))}</span><h2>${escapeHtml(item.description)}</h2><small class="muted">Frist ${new Date(item.due_date+"T12:00:00").toLocaleDateString("da-DK")}</small></div><div style="text-align:right"><div class="amount">${money(item.amount)}</div><span class="badge status-${status}">${statusLabel(status)}</span></div></div>
+          ${item.notes?`<p class="muted">${escapeHtml(item.notes)}</p>`:""}
+          <div class="actions">${item.status!=="paid"?`<button class="button secondary" data-paid="${item.id}">Markér betalt</button>`:`<button class="button secondary" data-pending="${item.id}">Fortryd betaling</button>`}<button class="button secondary danger" data-delete="${item.id}">Slet</button></div>
+        </article>`}).join(""):'<article class="card empty">Der er endnu ikke oprettet betalinger.</article>';
+    }
+    async function load(){
+      const [studentResult,paymentResult]=await Promise.all([supabaseClient.from("students").select("id,full_name").order("full_name"),supabaseClient.from("student_payments").select("*").order("created_at",{ascending:false})]);
+      const error=studentResult.error||paymentResult.error;if(error){formMessage.textContent=error.message;return;}
+      students=studentResult.data||[];payments=paymentResult.data||[];
+      studentId.innerHTML='<option value="">Vælg elev</option>'+students.map(item=>`<option value="${item.id}">${escapeHtml(item.full_name)}</option>`).join("");render();
+    }
+    paymentForm.addEventListener("submit",async event=>{event.preventDefault();saveButton.disabled=true;formMessage.textContent="Opretter…";
+      const {data,error}=await supabaseClient.from("student_payments").insert({student_id:studentId.value,description:description.value.trim(),amount:Number(amount.value),due_date:dueDate.value,notes:notes.value.trim()||null}).select().single();
+      saveButton.disabled=false;if(error){formMessage.textContent=error.message;return;}payments.unshift(data);paymentForm.reset();render();formMessage.textContent="Betalingen er oprettet og synlig for familien.";
+    });
+    paymentList.addEventListener("click",async event=>{
+      const paid=event.target.closest("[data-paid]"),pending=event.target.closest("[data-pending]"),remove=event.target.closest("[data-delete]");
+      if(paid||pending){const id=(paid||pending).dataset[paid?"paid":"pending"],status=paid?"paid":"pending";const {data,error}=await supabaseClient.from("student_payments").update({status,paid_at:paid?new Date().toISOString():null}).eq("id",id).select().single();if(error){alert(error.message);return;}payments=payments.map(item=>item.id===id?data:item);render();}
+      if(remove){if(!confirm("Vil du slette denne betaling?"))return;const {error}=await supabaseClient.from("student_payments").delete().eq("id",remove.dataset.delete);if(error){alert(error.message);return;}payments=payments.filter(item=>item.id!==remove.dataset.delete);render();}
+    });
+    (async()=>{const auth=await requireRole(["admin"]);if(!auth)return;loading.remove();app.hidden=false;await load();})();
+  </script>
+</body>
+</html>
