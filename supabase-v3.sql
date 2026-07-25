@@ -182,6 +182,27 @@ with check (public.is_admin());
 grant select, insert, update, delete on public.lesson_sessions to authenticated;
 grant select, insert, update, delete on public.attendance_records to authenticated;
 
+-- Materialer og lektier til holdene.
+create table if not exists public.learning_items (
+  id uuid primary key default gen_random_uuid(),
+  class_id uuid not null references public.classes(id) on delete cascade,
+  kind text not null check (kind in ('material', 'homework')),
+  title text not null,
+  description text,
+  resource_url text,
+  due_date date,
+  created_at timestamptz not null default now()
+);
+
+alter table public.learning_items enable row level security;
+
+drop policy if exists "Admins manage learning items" on public.learning_items;
+create policy "Admins manage learning items" on public.learning_items
+for all to authenticated using (public.is_admin())
+with check (public.is_admin());
+
+grant select, insert, update, delete on public.learning_items to authenticated;
+
 -- Efter at din bruger er oprettet i Authentication, gør den til admin:
 -- update public.profiles set role = 'admin'
 -- where id = (select id from auth.users where email = 'DIN_EMAIL');

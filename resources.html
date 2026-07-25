@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Materialer og lektier — Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .resource-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(320px,.75fr);gap:16px}
+    .resource-card{display:grid;gap:14px}
+    .resource-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+    .resource-meta{display:flex;gap:8px;flex-wrap:wrap}
+    .resource-meta span{padding:6px 9px;border-radius:999px;background:var(--brand-soft);color:var(--brand);font-size:12px;font-weight:750}
+    .resource-actions{display:flex;gap:8px;flex-wrap:wrap}
+    .delete-button{border:1px solid #efc8c4;background:#fff;color:var(--danger);padding:9px 11px;border-radius:9px;font-weight:750;cursor:pointer}
+    .section-title{margin:0;font-family:Georgia,serif;font-size:25px;font-weight:500}
+    .field select{padding:13px 14px;border:1px solid #cbd4cf;border-radius:11px;background:#fff}
+    .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+    .filters button{border:1px solid var(--line);background:#fff;padding:8px 11px;border-radius:999px;font-weight:750;cursor:pointer}
+    .filters button.active{background:var(--brand);border-color:var(--brand);color:#fff}
+    @media(max-width:950px){.resource-layout{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Henter materialer…</div>
+
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="index.html">Substans</a>
+      <nav class="nav">
+        <a href="admin.html">Ansøgninger</a>
+        <a href="students.html">Elever</a>
+        <a href="classes.html">Hold</a>
+        <a href="teachers.html">Undervisere</a>
+        <a href="attendance.html">Fremmøde</a>
+        <a class="active" href="resources.html">Materialer</a>
+      </nav>
+      <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <span class="eyebrow">Administration</span>
+          <h1 class="title">Materialer og lektier</h1>
+          <p class="muted">Del ressourcer og opgaver med bestemte hold.</p>
+        </div>
+        <span id="adminName" class="badge">Administrator</span>
+      </header>
+
+      <section class="grid">
+        <article class="card stat"><span class="muted">Alle</span><strong id="totalCount">—</strong></article>
+        <article class="card stat"><span class="muted">Materialer</span><strong id="materialCount">—</strong></article>
+        <article class="card stat"><span class="muted">Lektier</span><strong id="homeworkCount">—</strong></article>
+      </section>
+
+      <div class="resource-layout" style="margin-top:16px">
+        <section>
+          <div class="filters" aria-label="Filtrér materialer">
+            <button class="active" type="button" data-filter="all">Alle</button>
+            <button type="button" data-filter="material">Materialer</button>
+            <button type="button" data-filter="homework">Lektier</button>
+          </div>
+          <div id="resourceList" class="list"></div>
+        </section>
+
+        <aside>
+          <form id="resourceForm" class="card">
+            <h2 class="section-title">Opret nyt</h2>
+            <div class="field"><label for="classId">Hold</label><select id="classId" required></select></div>
+            <div class="field"><label for="kind">Type</label>
+              <select id="kind"><option value="material">Materiale</option><option value="homework">Lektie</option></select>
+            </div>
+            <div class="field"><label for="title">Titel</label><input id="title" required placeholder="F.eks. Refleksionsopgave om Sīrah"></div>
+            <div class="field"><label for="description">Beskrivelse</label><textarea id="description" rows="4" placeholder="Hvad skal eleverne læse eller gøre?"></textarea></div>
+            <div class="field"><label for="resourceUrl">Link</label><input id="resourceUrl" type="url" placeholder="https://…"></div>
+            <div class="field"><label for="dueDate">Afleveringsfrist</label><input id="dueDate" type="date"></div>
+            <button id="createButton" class="button" type="submit">Del med holdet</button>
+            <div id="formStatus" class="status" role="status"></div>
+          </form>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    let classes = [];
+    let resources = [];
+    let activeFilter = "all";
+
+    function showStatus(message, type) {
+      formStatus.textContent = message;
+      formStatus.className = "status show " + type;
+    }
+
+    function kindLabel(kind) {
+      return kind === "homework" ? "Lektie" : "Materiale";
+    }
+
+    function render() {
+      totalCount.textContent = resources.length;
+      materialCount.textContent = resources.filter(item => item.kind === "material").length;
+      homeworkCount.textContent = resources.filter(item => item.kind === "homework").length;
+      classId.innerHTML = classes.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
+      createButton.disabled = !classes.length;
+
+      const visibleItems = resources.filter(item => activeFilter === "all" || item.kind === activeFilter);
+      resourceList.innerHTML = visibleItems.length ? visibleItems.map(item => {
+        const itemClass = classes.find(entry => entry.id === item.class_id);
+        const due = item.due_date ? new Date(item.due_date + "T12:00:00").toLocaleDateString("da-DK") : null;
+        return `<article class="card resource-card">
+          <div class="resource-head">
+            <div><span class="eyebrow">${escapeHtml(kindLabel(item.kind))}</span><h2 class="section-title">${escapeHtml(item.title)}</h2></div>
+            <span class="badge">${escapeHtml(itemClass?.name || "Hold")}</span>
+          </div>
+          <div class="resource-meta">
+            <span>${escapeHtml(kindLabel(item.kind))}</span>
+            ${due ? `<span>Frist ${escapeHtml(due)}</span>` : ""}
+          </div>
+          ${item.description ? `<p class="muted">${escapeHtml(item.description)}</p>` : ""}
+          <div class="resource-actions">
+            ${item.resource_url ? `<a class="button secondary" href="${escapeHtml(item.resource_url)}" target="_blank" rel="noopener">Åbn link</a>` : ""}
+            <button class="delete-button" type="button" data-delete-id="${escapeHtml(item.id)}">Slet</button>
+          </div>
+        </article>`;
+      }).join("") : '<article class="card empty">Der er ingen materialer i denne visning endnu.</article>';
+    }
+
+    async function loadData() {
+      const [classResult, resourceResult] = await Promise.all([
+        supabaseClient.from("classes").select("id,name").order("name"),
+        supabaseClient.from("learning_items").select("*").order("created_at", { ascending:false })
+      ]);
+      if (classResult.error || resourceResult.error) {
+        resourceList.innerHTML = '<article class="card empty">Materialerne kunne ikke hentes. Kontrollér modulets databaseopsætning.</article>';
+        return;
+      }
+      classes = classResult.data || [];
+      resources = resourceResult.data || [];
+      render();
+    }
+
+    document.querySelector(".filters").addEventListener("click", event => {
+      const button = event.target.closest("button[data-filter]");
+      if (!button) return;
+      activeFilter = button.dataset.filter;
+      document.querySelectorAll(".filters button").forEach(item => item.classList.toggle("active", item === button));
+      render();
+    });
+
+    resourceForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      createButton.disabled = true;
+      createButton.textContent = "Deler…";
+      const { error } = await supabaseClient.from("learning_items").insert({
+        class_id: classId.value,
+        kind: kind.value,
+        title: title.value.trim(),
+        description: description.value.trim() || null,
+        resource_url: resourceUrl.value.trim() || null,
+        due_date: kind.value === "homework" && dueDate.value ? dueDate.value : null
+      });
+      if (error) {
+        showStatus("Materialet kunne ikke deles.", "error");
+      } else {
+        resourceForm.reset();
+        showStatus("Materialet er delt med holdet.", "success");
+        await loadData();
+      }
+      createButton.disabled = !classes.length;
+      createButton.textContent = "Del med holdet";
+    });
+
+    resourceList.addEventListener("click", async event => {
+      const button = event.target.closest("button[data-delete-id]");
+      if (!button) return;
+      button.disabled = true;
+      const { error } = await supabaseClient.from("learning_items").delete().eq("id", button.dataset.deleteId);
+      if (error) alert("Materialet kunne ikke slettes.");
+      await loadData();
+    });
+
+    kind.addEventListener("change", () => {
+      dueDate.disabled = kind.value !== "homework";
+      if (dueDate.disabled) dueDate.value = "";
+    });
+
+    (async () => {
+      const auth = await requireRole(["admin"]);
+      if (!auth) return;
+      adminName.textContent = auth.profile.full_name || "Administrator";
+      dueDate.disabled = true;
+      loading.remove();
+      app.hidden = false;
+      loadData();
+    })();
+  </script>
+</body>
+</html>
