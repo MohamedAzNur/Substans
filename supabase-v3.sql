@@ -88,12 +88,37 @@ create table if not exists public.students (
   created_at timestamptz not null default now()
 );
 
+alter table public.students add column if not exists student_profile_id uuid references public.profiles(id) on delete set null;
+alter table public.students add column if not exists parent_profile_id uuid references public.profiles(id) on delete set null;
 alter table public.students enable row level security;
+
+create or replace function public.current_student_ids()
+returns setof uuid language sql stable security definer set search_path = public
+as $$
+  select id from public.students
+  where student_profile_id = auth.uid()
+     or parent_profile_id = auth.uid()
+     or lower(parent_email) = lower(coalesce(auth.jwt()->>'email', ''));
+$$;
+
+create or replace function public.can_access_class(target_class_id uuid)
+returns boolean language sql stable security definer set search_path = public
+as $$
+  select public.is_staff() or exists (
+    select 1 from public.class_enrollments
+    where class_id = target_class_id
+      and student_id in (select public.current_student_ids())
+  );
+$$;
 
 drop policy if exists "Admins manage students" on public.students;
 create policy "Admins manage students" on public.students
 for all to authenticated using (public.is_admin())
 with check (public.is_admin());
+
+drop policy if exists "Families read own students" on public.students;
+create policy "Families read own students" on public.students
+for select to authenticated using (id in (select public.current_student_ids()));
 
 grant select, insert, update on public.students to authenticated;
 
@@ -129,6 +154,14 @@ drop policy if exists "Admins manage class enrollments" on public.class_enrollme
 create policy "Admins manage class enrollments" on public.class_enrollments
 for all to authenticated using (public.is_admin())
 with check (public.is_admin());
+
+drop policy if exists "Families read own enrollments" on public.class_enrollments;
+create policy "Families read own enrollments" on public.class_enrollments
+for select to authenticated using (student_id in (select public.current_student_ids()));
+
+drop policy if exists "Members read enrolled classes" on public.classes;
+create policy "Members read enrolled classes" on public.classes
+for select to authenticated using (public.can_access_class(id));
 
 grant select, insert, update, delete on public.classes to authenticated;
 grant select, insert, delete on public.class_enrollments to authenticated;
@@ -219,6 +252,10 @@ create policy "Staff manage learning items" on public.learning_items
 for all to authenticated using (public.is_staff())
 with check (public.is_staff());
 
+drop policy if exists "Members read learning items" on public.learning_items;
+create policy "Members read learning items" on public.learning_items
+for select to authenticated using (public.can_access_class(class_id));
+
 drop policy if exists "Staff read classes" on public.classes;
 create policy "Staff read classes" on public.classes
 for select to authenticated using (public.is_staff());
@@ -232,9 +269,13 @@ on conflict (id) do update
 set public = excluded.public, file_size_limit = excluded.file_size_limit;
 
 drop policy if exists "Authenticated users read learning attachments" on storage.objects;
-create policy "Authenticated users read learning attachments"
+drop policy if exists "Members read learning attachments" on storage.objects;
+create policy "Members read learning attachments"
 on storage.objects for select to authenticated
-using (bucket_id = 'learning-attachments');
+using (
+  bucket_id = 'learning-attachments'
+  and public.can_access_class(((storage.foldername(name))[1])::uuid)
+);
 
 drop policy if exists "Staff upload learning attachments" on storage.objects;
 create policy "Staff upload learning attachments"
