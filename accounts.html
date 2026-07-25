@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Kontoadgang — Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .account-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,.36fr);gap:16px}
+    .account-list{display:grid;gap:12px}
+    .account-card{display:grid;grid-template-columns:minmax(180px,1fr) minmax(150px,.45fr) minmax(210px,.65fr) auto;gap:14px;align-items:end}
+    .account-name{align-self:center;min-width:0}
+    .account-name h2{font-family:Georgia,serif;font-size:23px;font-weight:500;margin:0}
+    .account-name p{margin:3px 0 0;overflow:hidden;text-overflow:ellipsis}
+    .compact-field{display:grid;gap:6px}
+    .compact-field label{font-size:12px;font-weight:800;color:var(--muted)}
+    .compact-field select{padding:11px 12px;border:1px solid var(--line);border-radius:11px;background:#fff}
+    .guide{position:sticky;top:20px}
+    .guide ol{padding-left:20px;color:var(--muted)}
+    .guide li{margin:11px 0}
+    .locked{opacity:.7}
+    @media(max-width:1050px){.account-layout{grid-template-columns:1fr}.guide{position:static}.account-card{grid-template-columns:1fr 1fr}.account-name{grid-column:span 2}}
+    @media(max-width:620px){.account-card{grid-template-columns:1fr}.account-name{grid-column:auto}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Henter konti…</div>
+
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="index.html">Substans</a>
+      <nav class="nav">
+        <a href="admin.html">Ansøgninger</a>
+        <a href="students.html">Elever</a>
+        <a href="classes.html">Hold</a>
+        <a href="teachers.html">Undervisere</a>
+        <a href="attendance.html">Fremmøde</a>
+        <a href="resources.html">Materialer</a>
+        <a class="active" href="accounts.html">Kontoadgang</a>
+      </nav>
+      <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <span class="eyebrow">Administration</span>
+          <h1 class="title">Kontoadgang</h1>
+          <p class="muted">Bestem hvem brugeren er, og hvad personen skal se i Campus.</p>
+        </div>
+        <span id="adminName" class="badge">Administrator</span>
+      </header>
+
+      <section class="grid">
+        <article class="card stat"><span class="muted">Login-konti</span><strong id="totalCount">—</strong></article>
+        <article class="card stat"><span class="muted">Koblede konti</span><strong id="linkedCount">—</strong></article>
+        <article class="card stat"><span class="muted">Mangler kobling</span><strong id="unlinkedCount">—</strong></article>
+      </section>
+
+      <div class="account-layout" style="margin-top:16px">
+        <section id="accountList" class="account-list"></section>
+        <aside class="card guide">
+          <span class="eyebrow">Sådan virker det</span>
+          <h2 style="font-family:Georgia,serif;font-size:27px;font-weight:500">Kobl kontoen én gang</h2>
+          <ol>
+            <li>Vælg om kontoen tilhører en elev, forælder eller underviser.</li>
+            <li>Vælg den rigtige person.</li>
+            <li>Gem. Campus viser derefter automatisk de rigtige hold og materialer.</li>
+          </ol>
+          <p class="muted">Din egen administratorkonto er låst, så den ikke kan ændres ved en fejl.</p>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    const roleLabels = { student:"Elev", parent:"Forælder", teacher:"Underviser", admin:"Administrator" };
+    let profiles = [];
+    let students = [];
+    let teachers = [];
+    let currentUserId = null;
+
+    function currentLink(profile) {
+      if (profile.role === "student") return students.find(item => item.student_profile_id === profile.id)?.id || "";
+      if (profile.role === "parent") return students.find(item => item.parent_profile_id === profile.id)?.id || "";
+      if (profile.role === "teacher") return teachers.find(item => item.profile_id === profile.id)?.id || "";
+      return "";
+    }
+
+    function optionsFor(role, selected) {
+      const source = role === "teacher" ? teachers : students;
+      const prompt = role === "teacher" ? "Vælg underviser" : role === "parent" ? "Vælg barn" : "Vælg elev";
+      if (!["student","parent","teacher"].includes(role)) return `<option value="">Ikke relevant</option>`;
+      return `<option value="">${prompt}</option>${source.map(item => `<option value="${escapeHtml(item.id)}" ${item.id === selected ? "selected" : ""}>${escapeHtml(item.full_name)}</option>`).join("")}`;
+    }
+
+    function isLinked(profile) {
+      return profile.role === "admin" || Boolean(currentLink(profile));
+    }
+
+    function render() {
+      totalCount.textContent = profiles.length;
+      linkedCount.textContent = profiles.filter(isLinked).length;
+      unlinkedCount.textContent = profiles.filter(item => !isLinked(item)).length;
+
+      accountList.innerHTML = profiles.length ? profiles.map(profile => {
+        const locked = profile.id === currentUserId;
+        const link = currentLink(profile);
+        return `<article class="card account-card ${locked ? "locked" : ""}" data-account-id="${escapeHtml(profile.id)}">
+          <div class="account-name">
+            <h2>${escapeHtml(profile.full_name || "Unavngiven konto")}</h2>
+            <p class="muted">${escapeHtml(profile.email || "Ingen e-mail")}</p>
+          </div>
+          <div class="compact-field">
+            <label>Rolle</label>
+            <select data-role ${locked ? "disabled" : ""}>${Object.entries(roleLabels).map(([value,label]) => `<option value="${value}" ${profile.role === value ? "selected" : ""}>${label}</option>`).join("")}</select>
+          </div>
+          <div class="compact-field">
+            <label>Tilknytning</label>
+            <select data-link ${locked || profile.role === "admin" ? "disabled" : ""}>${optionsFor(profile.role, link)}</select>
+          </div>
+          <button class="button" type="button" data-save ${locked ? "disabled" : ""}>${locked ? "Beskyttet" : "Gem"}</button>
+        </article>`;
+      }).join("") : '<article class="card empty">Der er endnu ingen login-konti.</article>';
+    }
+
+    async function loadData() {
+      const [profileResult, studentResult, teacherResult] = await Promise.all([
+        supabaseClient.from("profiles").select("id,full_name,email,role,created_at").order("created_at"),
+        supabaseClient.from("students").select("id,full_name,student_profile_id,parent_profile_id").order("full_name"),
+        supabaseClient.from("teachers").select("id,full_name,profile_id").order("full_name")
+      ]);
+      if (profileResult.error || studentResult.error || teacherResult.error) {
+        accountList.innerHTML = '<article class="card empty">Kontiene kunne ikke hentes. Kontrollér modulets opsætning.</article>';
+        return;
+      }
+      profiles = profileResult.data || [];
+      students = studentResult.data || [];
+      teachers = teacherResult.data || [];
+      render();
+    }
+
+    accountList.addEventListener("change", event => {
+      const card = event.target.closest("[data-account-id]");
+      if (!card || !event.target.matches("[data-role]")) return;
+      const role = event.target.value;
+      const linkSelect = card.querySelector("[data-link]");
+      linkSelect.innerHTML = optionsFor(role, "");
+      linkSelect.disabled = role === "admin";
+    });
+
+    accountList.addEventListener("click", async event => {
+      const button = event.target.closest("[data-save]");
+      if (!button) return;
+      const card = button.closest("[data-account-id]");
+      const profileId = card.dataset.accountId;
+      const role = card.querySelector("[data-role]").value;
+      const linkId = card.querySelector("[data-link]").value;
+      if (["student","parent","teacher"].includes(role) && !linkId) {
+        alert("Vælg hvem kontoen skal kobles til.");
+        return;
+      }
+
+      button.disabled = true;
+      button.textContent = "Gemmer…";
+      const operations = [
+        supabaseClient.from("profiles").update({ role }).eq("id", profileId),
+        supabaseClient.from("students").update({ student_profile_id:null }).eq("student_profile_id", profileId),
+        supabaseClient.from("students").update({ parent_profile_id:null }).eq("parent_profile_id", profileId),
+        supabaseClient.from("teachers").update({ profile_id:null }).eq("profile_id", profileId)
+      ];
+      const results = await Promise.all(operations);
+      let linkResult = { error:null };
+      if (!results.some(result => result.error)) {
+        if (role === "student") linkResult = await supabaseClient.from("students").update({ student_profile_id:profileId }).eq("id", linkId);
+        if (role === "parent") linkResult = await supabaseClient.from("students").update({ parent_profile_id:profileId }).eq("id", linkId);
+        if (role === "teacher") linkResult = await supabaseClient.from("teachers").update({ profile_id:profileId }).eq("id", linkId);
+      }
+      if (results.some(result => result.error) || linkResult.error) {
+        alert("Kontoadgangen kunne ikke gemmes.");
+      }
+      await loadData();
+    });
+
+    (async () => {
+      const auth = await requireRole(["admin"]);
+      if (!auth) return;
+      currentUserId = auth.session.user.id;
+      adminName.textContent = auth.profile.full_name || "Administrator";
+      loading.remove();
+      app.hidden = false;
+      loadData();
+    })();
+  </script>
+</body>
+</html>

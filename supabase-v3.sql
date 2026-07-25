@@ -3,20 +3,23 @@
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   full_name text,
+  email text,
   role text not null default 'student' check (role in ('student','parent','teacher','admin')),
   created_at timestamptz not null default now()
 );
 
+alter table public.profiles add column if not exists email text;
 alter table public.profiles enable row level security;
 
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public
 as $$
 begin
-  insert into public.profiles (id, full_name, role)
+  insert into public.profiles (id, full_name, email, role)
   values (
     new.id,
     coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
+    new.email,
     case when new.raw_user_meta_data->>'role' in ('student','parent','teacher') then new.raw_user_meta_data->>'role' else 'student' end
   )
   on conflict (id) do nothing;
@@ -28,10 +31,10 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users
 for each row execute procedure public.handle_new_user();
 
-insert into public.profiles (id, full_name, role)
-select id, coalesce(raw_user_meta_data->>'full_name', split_part(email, '@', 1)), 'student'
+insert into public.profiles (id, full_name, email, role)
+select id, coalesce(raw_user_meta_data->>'full_name', split_part(email, '@', 1)), email, 'student'
 from auth.users
-on conflict (id) do nothing;
+on conflict (id) do update set email = excluded.email;
 
 create or replace function public.is_admin()
 returns boolean language sql stable security definer set search_path = public
@@ -58,6 +61,11 @@ for select to authenticated using (auth.uid() = id);
 drop policy if exists "Admins read all profiles" on public.profiles;
 create policy "Admins read all profiles" on public.profiles
 for select to authenticated using (public.is_admin());
+
+drop policy if exists "Admins update profiles" on public.profiles;
+create policy "Admins update profiles" on public.profiles
+for update to authenticated using (public.is_admin())
+with check (public.is_admin());
 
 -- Bevar offentlig ansøgning; kun administratorer kan læse og ændre den.
 alter table public.applications add column if not exists status text not null default 'new';
@@ -177,6 +185,7 @@ create table if not exists public.teachers (
   created_at timestamptz not null default now()
 );
 
+alter table public.teachers add column if not exists profile_id uuid unique references public.profiles(id) on delete set null;
 alter table public.classes
 add column if not exists teacher_id uuid references public.teachers(id) on delete set null;
 
