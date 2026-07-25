@@ -5,12 +5,6 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Log ind — Substans</title>
   <link rel="stylesheet" href="app.css">
-  <style>
-    .auth-action{width:100%}
-    .text-button{display:block;width:100%;margin-top:14px;border:0;background:transparent;color:var(--brand);font:inherit;font-weight:750;cursor:pointer;text-align:center}
-    .text-button:hover{text-decoration:underline}
-    .button:disabled{opacity:.65;cursor:wait}
-  </style>
 </head>
 <body class="auth-page">
   <main class="auth-card">
@@ -32,6 +26,7 @@
       <button id="forgotButton" class="text-button" type="button">Glemt adgangskode?</button>
       <div id="status" class="status" role="status"></div>
     </form>
+    <p class="muted" style="text-align:center;margin:22px 0 0">Har du ikke en konto? <a href="register.html" style="color:var(--brand);font-weight:800">Opret konto</a></p>
 
     <form id="recoveryForm" hidden>
       <p class="muted">Skriv din e-mail, så sender vi et sikkert link til at vælge en ny adgangskode.</p>

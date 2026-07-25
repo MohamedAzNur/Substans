@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Opret konto — Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .auth-card{width:min(540px,100%)}
+    .field select{padding:13px 14px;border:1px solid #cbd4cf;border-radius:11px;background:#fff}
+    .security-note{padding:13px 15px;border-radius:12px;background:var(--brand-soft);color:var(--brand);font-size:13px}
+  </style>
+</head>
+<body class="auth-page">
+  <main class="auth-card">
+    <a class="brand" href="index.html">Substans</a>
+    <span class="eyebrow">Campus</span>
+    <h1 class="title">Opret din konto.</h1>
+    <p class="muted">Når kontoen er bekræftet, kobler Substans den til det rigtige barn eller hold.</p>
+
+    <form id="registerForm">
+      <div class="field">
+        <label for="fullName">Fulde navn</label>
+        <input id="fullName" autocomplete="name" required>
+      </div>
+      <div class="field">
+        <label for="requestedRole">Jeg er</label>
+        <select id="requestedRole" required>
+          <option value="parent">Forælder</option>
+          <option value="student">Elev</option>
+          <option value="teacher">Underviser</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="email">E-mail</label>
+        <input id="email" type="email" autocomplete="email" required>
+      </div>
+      <div class="field">
+        <label for="password">Adgangskode</label>
+        <input id="password" type="password" autocomplete="new-password" minlength="8" required>
+      </div>
+      <div class="field">
+        <label for="passwordAgain">Gentag adgangskode</label>
+        <input id="passwordAgain" type="password" autocomplete="new-password" minlength="8" required>
+      </div>
+      <p class="security-note">Din valgte rolle giver ikke automatisk adgang. En administrator godkender og kobler kontoen først.</p>
+      <button id="registerButton" class="button auth-action" type="submit">Opret konto</button>
+      <div id="status" class="status" role="status"></div>
+    </form>
+
+    <p class="muted" style="text-align:center;margin:22px 0 0">Har du allerede en konto? <a href="login.html" style="color:var(--brand);font-weight:800">Log ind</a></p>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script>
+    const statusBox = document.getElementById("status");
+
+    function show(message, type) {
+      statusBox.textContent = message;
+      statusBox.className = "status show " + type;
+    }
+
+    registerForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (password.value !== passwordAgain.value) {
+        show("Adgangskoderne er ikke ens.", "error");
+        return;
+      }
+
+      registerButton.disabled = true;
+      registerButton.textContent = "Opretter…";
+      const emailRedirectTo = new URL("login.html", window.location.href).href;
+      const { data, error } = await supabaseClient.auth.signUp({
+        email: email.value.trim().toLowerCase(),
+        password: password.value,
+        options: {
+          emailRedirectTo,
+          data: {
+            full_name: fullName.value.trim(),
+            requested_role: requestedRole.value
+          }
+        }
+      });
+
+      if (error) {
+        const message = error.status === 429
+          ? "Der er forsøgt for mange gange. Vent lidt og prøv igen."
+          : "Kontoen kunne ikke oprettes. E-mailen kan allerede være i brug.";
+        show(message, "error");
+        registerButton.disabled = false;
+        registerButton.textContent = "Opret konto";
+        return;
+      }
+
+      if (data.session) await supabaseClient.auth.signOut();
+      registerForm.reset();
+      show("Kontoen er oprettet. Tjek din e-mail og bekræft kontoen. Derefter godkender Substans adgangen.", "success");
+      registerButton.textContent = "Konto oprettet";
+    });
+  </script>
+</body>
+</html>

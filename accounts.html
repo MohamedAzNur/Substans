@@ -109,18 +109,20 @@
       accountList.innerHTML = profiles.length ? profiles.map(profile => {
         const locked = profile.id === currentUserId;
         const link = currentLink(profile);
+        const selectedRole = link || profile.role === "admin" ? profile.role : (profile.requested_role || profile.role);
         return `<article class="card account-card ${locked ? "locked" : ""}" data-account-id="${escapeHtml(profile.id)}">
           <div class="account-name">
             <h2>${escapeHtml(profile.full_name || "Unavngiven konto")}</h2>
             <p class="muted">${escapeHtml(profile.email || "Ingen e-mail")}</p>
+            ${profile.requested_role && !link ? `<span class="badge">Ønsker: ${escapeHtml(roleLabels[profile.requested_role])}</span>` : ""}
           </div>
           <div class="compact-field">
             <label>Rolle</label>
-            <select data-role ${locked ? "disabled" : ""}>${Object.entries(roleLabels).map(([value,label]) => `<option value="${value}" ${profile.role === value ? "selected" : ""}>${label}</option>`).join("")}</select>
+            <select data-role ${locked ? "disabled" : ""}>${Object.entries(roleLabels).map(([value,label]) => `<option value="${value}" ${selectedRole === value ? "selected" : ""}>${label}</option>`).join("")}</select>
           </div>
           <div class="compact-field">
             <label>Tilknytning</label>
-            <select data-link ${locked || profile.role === "admin" ? "disabled" : ""}>${optionsFor(profile.role, link)}</select>
+            <select data-link ${locked || selectedRole === "admin" ? "disabled" : ""}>${optionsFor(selectedRole, link)}</select>
           </div>
           <button class="button" type="button" data-save ${locked ? "disabled" : ""}>${locked ? "Beskyttet" : "Gem"}</button>
         </article>`;
@@ -129,7 +131,7 @@
 
     async function loadData() {
       const [profileResult, studentResult, teacherResult] = await Promise.all([
-        supabaseClient.from("profiles").select("id,full_name,email,role,created_at").order("created_at"),
+        supabaseClient.from("profiles").select("id,full_name,email,role,requested_role,created_at").order("created_at"),
         supabaseClient.from("students").select("id,full_name,student_profile_id,parent_profile_id").order("full_name"),
         supabaseClient.from("teachers").select("id,full_name,profile_id").order("full_name")
       ]);
@@ -167,7 +169,7 @@
       button.disabled = true;
       button.textContent = "Gemmer…";
       const operations = [
-        supabaseClient.from("profiles").update({ role }).eq("id", profileId),
+        supabaseClient.from("profiles").update({ role, requested_role:null }).eq("id", profileId),
         supabaseClient.from("students").update({ student_profile_id:null }).eq("student_profile_id", profileId),
         supabaseClient.from("students").update({ parent_profile_id:null }).eq("parent_profile_id", profileId),
         supabaseClient.from("teachers").update({ profile_id:null }).eq("profile_id", profileId)

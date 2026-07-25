@@ -4,25 +4,28 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   full_name text,
   email text,
+  requested_role text check (requested_role in ('student','parent','teacher')),
   role text not null default 'student' check (role in ('student','parent','teacher','admin')),
   created_at timestamptz not null default now()
 );
 
 alter table public.profiles add column if not exists email text;
+alter table public.profiles add column if not exists requested_role text check (requested_role in ('student','parent','teacher'));
 alter table public.profiles enable row level security;
 
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public
 as $$
 begin
-  insert into public.profiles (id, full_name, email, role)
+  insert into public.profiles (id, full_name, email, requested_role, role)
   values (
     new.id,
     coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
     new.email,
-    case when new.raw_user_meta_data->>'role' in ('student','parent','teacher') then new.raw_user_meta_data->>'role' else 'student' end
+    case when new.raw_user_meta_data->>'requested_role' in ('student','parent','teacher') then new.raw_user_meta_data->>'requested_role' else null end,
+    'student'
   )
-  on conflict (id) do nothing;
+  on conflict (id) do update set email = excluded.email;
   return new;
 end;
 $$;
