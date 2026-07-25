@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Udvikling · Substans</title><link rel="stylesheet" href="app.css">
+  <style>
+    .layout{display:grid;grid-template-columns:minmax(320px,.72fr) minmax(0,1.28fr);gap:16px}.form-grid,.progress-list{display:grid;gap:14px}
+    .form-grid label{display:grid;gap:7px;font-weight:750}.form-grid input,.form-grid select,.form-grid textarea{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff;font:inherit}
+    .progress-card{display:grid;gap:13px}.progress-head{display:flex;justify-content:space-between;gap:16px}.progress-card h2{font-family:Georgia,serif;font-weight:500;font-size:24px;margin:3px 0}
+    .level{min-width:110px;text-align:right}.level strong{display:block;color:var(--brand);font-size:23px}.bar{height:8px;background:#e8ece9;border-radius:99px;overflow:hidden}.bar span{display:block;height:100%;background:var(--brand);border-radius:99px}
+    .goal{background:var(--brand-soft);color:var(--brand);padding:13px;border-radius:12px}.danger{color:#a33;border-color:#ead2d2}
+    @media(max-width:900px){.layout{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Åbner udvikling…</div>
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar"><a class="brand" href="index.html">Substans</a><nav class="nav">
+      <a href="admin.html">Ansøgninger</a><a href="students.html">Elever</a><a href="classes.html">Hold</a><a href="teachers.html">Undervisere</a><a href="attendance.html">Fremmøde</a>
+      <a href="resources.html">Materialer</a><a href="feedback.html">Feedback</a><a href="messages.html">Beskeder</a><a href="payments.html">Betalinger</a><a href="calendar.html">Kalender</a>
+      <a class="active" href="progress.html">Udvikling</a><a href="accounts.html">Kontoadgang</a>
+    </nav><div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div></aside>
+    <main class="main">
+      <header class="topbar"><div><span class="eyebrow">Læring med retning</span><h1 class="title">Faglig udvikling</h1><p class="muted">Følg forståelse og kontinuitet — uden at reducere barnet til en karakter.</p></div><span class="badge">Substans Campus</span></header>
+      <section class="layout">
+        <article class="card"><span class="eyebrow">Ny vurdering</span><h2 style="font-family:Georgia,serif;font-size:28px;font-weight:500">Registrér udvikling</h2>
+          <form id="progressForm" class="form-grid">
+            <label>Elev<select id="studentId" required><option value="">Vælg elev</option></select></label>
+            <label>Fag<select id="subject" required><option>Qur’an</option><option>Sīrah</option><option>ʿAqīdah</option><option>Fiqh</option><option>Tarbiyah</option></select></label>
+            <label>Fokusområde<input id="skill" required maxlength="160" placeholder="Fx Forståelse af Al-Fātiḥah"></label>
+            <label>Niveau<select id="level" required><option value="1">1 · Introduceret</option><option value="2">2 · På vej</option><option value="3">3 · Forstår</option><option value="4">4 · Anvender</option><option value="5">5 · Selvstændig</option></select></label>
+            <label>Observation<textarea id="notes" rows="4" maxlength="1600" placeholder="Hvad viser elevens udvikling?"></textarea></label>
+            <label>Næste mål<textarea id="nextGoal" rows="3" maxlength="1000" placeholder="Hvad arbejder eleven videre med?"></textarea></label>
+            <button id="saveButton" class="button" type="submit">Gem vurdering</button><p id="formMessage" class="muted" role="status"></p>
+          </form>
+        </article>
+        <div><div class="topbar" style="margin-bottom:12px"><div><span class="eyebrow">Overblik</span><h2 style="margin:4px 0">Seneste vurderinger</h2></div></div><div id="progressList" class="progress-list"><article class="card empty">Indlæser udvikling…</article></div></div>
+      </section>
+    </main>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="supabase-config.js"></script><script src="auth.js"></script>
+  <script>
+    let authState,students=[],rows=[];const studentName=id=>students.find(item=>item.id===id)?.full_name||"Elev";const levelLabel=n=>["","Introduceret","På vej","Forstår","Anvender","Selvstændig"][n]||"Niveau";
+    function render(){progressList.innerHTML=rows.length?rows.map(item=>`<article class="card progress-card"><div class="progress-head"><div><span class="eyebrow">${escapeHtml(studentName(item.student_id))} · ${escapeHtml(item.subject)}</span><h2>${escapeHtml(item.skill)}</h2><small class="muted">${new Date(item.created_at).toLocaleDateString("da-DK",{day:"numeric",month:"long",year:"numeric"})}</small></div><div class="level"><strong>${item.level}/5</strong><span class="muted">${escapeHtml(levelLabel(item.level))}</span></div></div><div class="bar"><span style="width:${item.level*20}%"></span></div>${item.notes?`<p>${escapeHtml(item.notes)}</p>`:""}${item.next_goal?`<div class="goal"><b>Næste mål</b><br>${escapeHtml(item.next_goal)}</div>`:""}<div><button class="button secondary danger" data-delete="${item.id}">Slet</button></div></article>`).join(""):'<article class="card empty">Der er endnu ikke registreret faglig udvikling.</article>';}
+    async function load(){const [sr,pr]=await Promise.all([supabaseClient.from("students").select("id,full_name").order("full_name"),supabaseClient.from("student_progress").select("*").order("created_at",{ascending:false})]);const error=sr.error||pr.error;if(error){formMessage.textContent=error.message;return;}students=sr.data||[];rows=pr.data||[];studentId.innerHTML='<option value="">Vælg elev</option>'+students.map(item=>`<option value="${item.id}">${escapeHtml(item.full_name)}</option>`).join("");render();}
+    progressForm.addEventListener("submit",async e=>{e.preventDefault();saveButton.disabled=true;formMessage.textContent="Gemmer…";const {data,error}=await supabaseClient.from("student_progress").insert({student_id:studentId.value,author_profile_id:authState.profile.id,subject:subject.value,skill:skill.value.trim(),level:Number(level.value),notes:notes.value.trim()||null,next_goal:nextGoal.value.trim()||null}).select().single();saveButton.disabled=false;if(error){formMessage.textContent=error.message;return;}rows.unshift(data);progressForm.reset();render();formMessage.textContent="Vurderingen er gemt og synlig i familiens Campus.";});
+    progressList.addEventListener("click",async e=>{const b=e.target.closest("[data-delete]");if(!b)return;if(!confirm("Vil du slette vurderingen?"))return;const {error}=await supabaseClient.from("student_progress").delete().eq("id",b.dataset.delete);if(error){alert(error.message);return;}rows=rows.filter(item=>item.id!==b.dataset.delete);render();});
+    (async()=>{authState=await requireRole(["admin","teacher"]);if(!authState)return;loading.remove();app.hidden=false;await load();})();
+  </script>
+</body></html>
