@@ -42,6 +42,15 @@ as $$
   );
 $$;
 
+create or replace function public.is_staff()
+returns boolean language sql stable security definer set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role in ('admin', 'teacher')
+  );
+$$;
+
 drop policy if exists "Users read own profile" on public.profiles;
 create policy "Users read own profile" on public.profiles
 for select to authenticated using (auth.uid() = id);
@@ -190,18 +199,52 @@ create table if not exists public.learning_items (
   title text not null,
   description text,
   resource_url text,
+  file_path text,
+  file_name text,
+  file_type text,
+  file_size bigint,
   due_date date,
   created_at timestamptz not null default now()
 );
 
+alter table public.learning_items add column if not exists file_path text;
+alter table public.learning_items add column if not exists file_name text;
+alter table public.learning_items add column if not exists file_type text;
+alter table public.learning_items add column if not exists file_size bigint;
 alter table public.learning_items enable row level security;
 
 drop policy if exists "Admins manage learning items" on public.learning_items;
-create policy "Admins manage learning items" on public.learning_items
-for all to authenticated using (public.is_admin())
-with check (public.is_admin());
+drop policy if exists "Staff manage learning items" on public.learning_items;
+create policy "Staff manage learning items" on public.learning_items
+for all to authenticated using (public.is_staff())
+with check (public.is_staff());
+
+drop policy if exists "Staff read classes" on public.classes;
+create policy "Staff read classes" on public.classes
+for select to authenticated using (public.is_staff());
 
 grant select, insert, update, delete on public.learning_items to authenticated;
+
+-- Privat filområde til materialer og lektier. Filer åbnes via tidsbegrænsede links.
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('learning-attachments', 'learning-attachments', false, 52428800)
+on conflict (id) do update
+set public = excluded.public, file_size_limit = excluded.file_size_limit;
+
+drop policy if exists "Authenticated users read learning attachments" on storage.objects;
+create policy "Authenticated users read learning attachments"
+on storage.objects for select to authenticated
+using (bucket_id = 'learning-attachments');
+
+drop policy if exists "Staff upload learning attachments" on storage.objects;
+create policy "Staff upload learning attachments"
+on storage.objects for insert to authenticated
+with check (bucket_id = 'learning-attachments' and public.is_staff());
+
+drop policy if exists "Staff delete learning attachments" on storage.objects;
+create policy "Staff delete learning attachments"
+on storage.objects for delete to authenticated
+using (bucket_id = 'learning-attachments' and public.is_staff());
 
 -- Efter at din bruger er oprettet i Authentication, gør den til admin:
 -- update public.profiles set role = 'admin'

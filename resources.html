@@ -18,6 +18,13 @@
     .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
     .filters button{border:1px solid var(--line);background:#fff;padding:8px 11px;border-radius:999px;font-weight:750;cursor:pointer}
     .filters button.active{background:var(--brand);border-color:var(--brand);color:#fff}
+    .file-drop{border:1px dashed #aabbb2;border-radius:12px;padding:16px;background:#f8faf9}
+    .file-drop input{width:100%;margin-top:8px}
+    .file-hint{font-size:12px;margin:7px 0 0;color:var(--muted)}
+    .attachment{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--line);border-radius:11px;background:#f8faf9}
+    .attachment-info{min-width:0;flex:1}
+    .attachment-name{display:block;font-weight:750;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .attachment-size{font-size:12px;color:var(--muted)}
     @media(max-width:950px){.resource-layout{grid-template-columns:1fr}}
   </style>
 </head>
@@ -41,11 +48,11 @@
     <main class="main">
       <header class="topbar">
         <div>
-          <span class="eyebrow">Administration</span>
+          <span id="roleLabel" class="eyebrow">Administration</span>
           <h1 class="title">Materialer og lektier</h1>
           <p class="muted">Del ressourcer og opgaver med bestemte hold.</p>
         </div>
-        <span id="adminName" class="badge">Administrator</span>
+        <span id="adminName" class="badge">Bruger</span>
       </header>
 
       <section class="grid">
@@ -74,6 +81,11 @@
             <div class="field"><label for="title">Titel</label><input id="title" required placeholder="F.eks. Refleksionsopgave om Sīrah"></div>
             <div class="field"><label for="description">Beskrivelse</label><textarea id="description" rows="4" placeholder="Hvad skal eleverne læse eller gøre?"></textarea></div>
             <div class="field"><label for="resourceUrl">Link</label><input id="resourceUrl" type="url" placeholder="https://…"></div>
+            <div class="field file-drop">
+              <label for="attachment">Vedhæft fil</label>
+              <input id="attachment" type="file">
+              <p class="file-hint">PDF, Word, PowerPoint, billeder, lyd, video og andre filer. Maks. 50 MB.</p>
+            </div>
             <div class="field"><label for="dueDate">Afleveringsfrist</label><input id="dueDate" type="date"></div>
             <button id="createButton" class="button" type="submit">Del med holdet</button>
             <div id="formStatus" class="status" role="status"></div>
@@ -100,7 +112,20 @@
       return kind === "homework" ? "Lektie" : "Materiale";
     }
 
-    function render() {
+    function formatBytes(bytes) {
+      if (!bytes) return "";
+      const units = ["B", "KB", "MB", "GB"];
+      const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+      return `${(bytes / Math.pow(1024, index)).toFixed(index ? 1 : 0)} ${units[index]}`;
+    }
+
+    async function signedFileUrl(path) {
+      if (!path) return null;
+      const { data, error } = await supabaseClient.storage.from("learning-attachments").createSignedUrl(path, 3600);
+      return error ? null : data.signedUrl;
+    }
+
+    async function render() {
       totalCount.textContent = resources.length;
       materialCount.textContent = resources.filter(item => item.kind === "material").length;
       homeworkCount.textContent = resources.filter(item => item.kind === "homework").length;
@@ -108,9 +133,11 @@
       createButton.disabled = !classes.length;
 
       const visibleItems = resources.filter(item => activeFilter === "all" || item.kind === activeFilter);
-      resourceList.innerHTML = visibleItems.length ? visibleItems.map(item => {
+      const signedUrls = await Promise.all(visibleItems.map(item => signedFileUrl(item.file_path)));
+      resourceList.innerHTML = visibleItems.length ? visibleItems.map((item, index) => {
         const itemClass = classes.find(entry => entry.id === item.class_id);
         const due = item.due_date ? new Date(item.due_date + "T12:00:00").toLocaleDateString("da-DK") : null;
+        const fileUrl = signedUrls[index];
         return `<article class="card resource-card">
           <div class="resource-head">
             <div><span class="eyebrow">${escapeHtml(kindLabel(item.kind))}</span><h2 class="section-title">${escapeHtml(item.title)}</h2></div>
@@ -121,6 +148,13 @@
             ${due ? `<span>Frist ${escapeHtml(due)}</span>` : ""}
           </div>
           ${item.description ? `<p class="muted">${escapeHtml(item.description)}</p>` : ""}
+          ${item.file_path ? `<div class="attachment">
+            <div class="attachment-info">
+              <span class="attachment-name">${escapeHtml(item.file_name || "Vedhæftet fil")}</span>
+              <span class="attachment-size">${escapeHtml(formatBytes(item.file_size))}</span>
+            </div>
+            ${fileUrl ? `<a class="button secondary" href="${escapeHtml(fileUrl)}" target="_blank" rel="noopener">Åbn fil</a>` : `<span class="muted">Kan ikke åbnes</span>`}
+          </div>` : ""}
           <div class="resource-actions">
             ${item.resource_url ? `<a class="button secondary" href="${escapeHtml(item.resource_url)}" target="_blank" rel="noopener">Åbn link</a>` : ""}
             <button class="delete-button" type="button" data-delete-id="${escapeHtml(item.id)}">Slet</button>
@@ -140,7 +174,7 @@
       }
       classes = classResult.data || [];
       resources = resourceResult.data || [];
-      render();
+      await render();
     }
 
     document.querySelector(".filters").addEventListener("click", event => {
@@ -153,17 +187,44 @@
 
     resourceForm.addEventListener("submit", async event => {
       event.preventDefault();
+      const file = attachment.files[0] || null;
+      if (file && file.size > 50 * 1024 * 1024) {
+        showStatus("Filen er større end 50 MB.", "error");
+        return;
+      }
       createButton.disabled = true;
-      createButton.textContent = "Deler…";
+      createButton.textContent = file ? "Uploader fil…" : "Deler…";
+
+      let uploadedPath = null;
+      if (file) {
+        const safeName = file.name.normalize("NFKD").replace(/[^\w.-]+/g, "-").replace(/-+/g, "-");
+        uploadedPath = `${classId.value}/${crypto.randomUUID()}-${safeName}`;
+        const { error: uploadError } = await supabaseClient.storage
+          .from("learning-attachments")
+          .upload(uploadedPath, file, { contentType:file.type || "application/octet-stream", upsert:false });
+        if (uploadError) {
+          showStatus("Filen kunne ikke uploades.", "error");
+          createButton.disabled = !classes.length;
+          createButton.textContent = "Del med holdet";
+          return;
+        }
+      }
+
+      createButton.textContent = "Gemmer…";
       const { error } = await supabaseClient.from("learning_items").insert({
         class_id: classId.value,
         kind: kind.value,
         title: title.value.trim(),
         description: description.value.trim() || null,
         resource_url: resourceUrl.value.trim() || null,
+        file_path: uploadedPath,
+        file_name: file?.name || null,
+        file_type: file?.type || null,
+        file_size: file?.size || null,
         due_date: kind.value === "homework" && dueDate.value ? dueDate.value : null
       });
       if (error) {
+        if (uploadedPath) await supabaseClient.storage.from("learning-attachments").remove([uploadedPath]);
         showStatus("Materialet kunne ikke deles.", "error");
       } else {
         resourceForm.reset();
@@ -178,8 +239,13 @@
       const button = event.target.closest("button[data-delete-id]");
       if (!button) return;
       button.disabled = true;
+      const item = resources.find(entry => entry.id === button.dataset.deleteId);
       const { error } = await supabaseClient.from("learning_items").delete().eq("id", button.dataset.deleteId);
-      if (error) alert("Materialet kunne ikke slettes.");
+      if (error) {
+        alert("Materialet kunne ikke slettes.");
+      } else if (item?.file_path) {
+        await supabaseClient.storage.from("learning-attachments").remove([item.file_path]);
+      }
       await loadData();
     });
 
@@ -189,9 +255,11 @@
     });
 
     (async () => {
-      const auth = await requireRole(["admin"]);
+      const auth = await requireRole(["admin", "teacher"]);
       if (!auth) return;
-      adminName.textContent = auth.profile.full_name || "Administrator";
+      const isTeacher = auth.profile.role === "teacher";
+      adminName.textContent = auth.profile.full_name || (isTeacher ? "Underviser" : "Administrator");
+      roleLabel.textContent = isTeacher ? "Underviser" : "Administration";
       dueDate.disabled = true;
       loading.remove();
       app.hidden = false;
