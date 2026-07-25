@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Kalender · Substans</title><link rel="stylesheet" href="app.css">
+  <style>
+    .layout{display:grid;grid-template-columns:minmax(320px,.7fr) minmax(0,1.3fr);gap:16px}.form-grid,.event-list{display:grid;gap:14px}
+    .form-grid label{display:grid;gap:7px;font-weight:750}.form-grid input,.form-grid select,.form-grid textarea{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff;font:inherit}
+    .event-card{display:grid;grid-template-columns:76px 1fr auto;gap:16px;align-items:start}.date-box{border-radius:14px;background:var(--brand-soft);color:var(--brand);text-align:center;padding:12px 8px}.date-box b{display:block;font-size:27px}.date-box span{font-size:12px;font-weight:800;text-transform:uppercase}
+    .event-card h2{font-family:Georgia,serif;font-weight:500;font-size:24px;margin:2px 0 6px}.actions{display:flex;gap:8px;flex-wrap:wrap}.danger{color:#a33;border-color:#ead2d2}
+    @media(max-width:900px){.layout{grid-template-columns:1fr}.event-card{grid-template-columns:68px 1fr}.event-card>.actions{grid-column:1/-1}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Åbner kalender…</div>
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar"><a class="brand" href="index.html">Substans</a><nav class="nav">
+      <a href="admin.html">Ansøgninger</a><a href="students.html">Elever</a><a href="classes.html">Hold</a><a href="teachers.html">Undervisere</a>
+      <a href="attendance.html">Fremmøde</a><a href="resources.html">Materialer</a><a href="feedback.html">Feedback</a><a href="messages.html">Beskeder</a>
+      <a href="payments.html">Betalinger</a><a class="active" href="calendar.html">Kalender</a><a href="accounts.html">Kontoadgang</a>
+    </nav><div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div></aside>
+    <main class="main">
+      <header class="topbar"><div><span class="eyebrow">Planlægning</span><h1 class="title">Kalender og lektioner</h1><p class="muted">Saml undervisning, arrangementer og pauser ét sted.</p></div><span class="badge">Substans Campus</span></header>
+      <section class="layout">
+        <article class="card"><span class="eyebrow">Ny kalenderpost</span><h2 style="font-family:Georgia,serif;font-size:28px;font-weight:500">Planlæg aktivitet</h2>
+          <form id="eventForm" class="form-grid">
+            <label>Hold<select id="classId" required><option value="">Vælg hold</option></select></label>
+            <label>Type<select id="eventType" required><option value="lesson">Undervisning</option><option value="event">Arrangement</option><option value="holiday">Ferie eller pause</option></select></label>
+            <label>Titel<input id="title" required maxlength="160" placeholder="Fx Sīrah · De første åbenbaringer"></label>
+            <label>Dato<input id="eventDate" required type="date"></label>
+            <label>Tidspunkt<input id="startTime" type="time"></label>
+            <label>Varighed i minutter<input id="durationMinutes" type="number" min="15" max="480" step="15" value="60"></label>
+            <label>Mødelink<input id="meetingUrl" type="url" placeholder="https://meet.google.com/…"></label>
+            <label>Praktisk information<textarea id="details" rows="4" maxlength="1500" placeholder="Hvad skal eleven have klar?"></textarea></label>
+            <button id="saveButton" class="button" type="submit">Tilføj til kalender</button><p id="formMessage" class="muted" role="status"></p>
+          </form>
+        </article>
+        <div><div class="topbar" style="margin-bottom:12px"><div><span class="eyebrow">Kommende</span><h2 style="margin:4px 0">Undervisningsplan</h2></div></div><div id="eventList" class="event-list"><article class="card empty">Indlæser kalender…</article></div></div>
+      </section>
+    </main>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="supabase-config.js"></script><script src="auth.js"></script>
+  <script>
+    let authState,classes=[],events=[];
+    const className=id=>classes.find(item=>item.id===id)?.name||"Hold";
+    const typeLabel=type=>({lesson:"Undervisning",event:"Arrangement",holiday:"Ferie / pause"}[type]||"Aktivitet");
+    function render(){
+      eventList.innerHTML=events.length?events.map(item=>{const d=new Date(item.event_date+"T12:00:00");return `<article class="card event-card">
+        <div class="date-box"><span>${d.toLocaleDateString("da-DK",{month:"short"})}</span><b>${d.getDate()}</b><span>${d.toLocaleDateString("da-DK",{weekday:"short"})}</span></div>
+        <div><span class="eyebrow">${escapeHtml(typeLabel(item.event_type))} · ${escapeHtml(className(item.class_id))}</span><h2>${escapeHtml(item.title)}</h2>
+        <p class="muted">${item.start_time?`Kl. ${escapeHtml(item.start_time.slice(0,5))}${item.duration_minutes?` · ${item.duration_minutes} min.`:""}`:"Hele dagen"}</p>${item.details?`<p>${escapeHtml(item.details)}</p>`:""}
+        ${item.meeting_url?`<a class="button secondary" href="${escapeHtml(item.meeting_url)}" target="_blank" rel="noopener">Åbn mødelink</a>`:""}</div>
+        <div class="actions"><button class="button secondary danger" data-delete="${item.id}">Slet</button></div></article>`}).join(""):'<article class="card empty">Der er endnu ikke planlagt aktiviteter.</article>';
+    }
+    async function load(){const [cr,er]=await Promise.all([supabaseClient.from("classes").select("id,name").order("name"),supabaseClient.from("calendar_events").select("*").order("event_date").order("start_time")]);const error=cr.error||er.error;if(error){formMessage.textContent=error.message;return;}classes=cr.data||[];events=er.data||[];classId.innerHTML='<option value="">Vælg hold</option>'+classes.map(item=>`<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("");render();}
+    eventForm.addEventListener("submit",async e=>{e.preventDefault();saveButton.disabled=true;formMessage.textContent="Gemmer…";const {data,error}=await supabaseClient.from("calendar_events").insert({class_id:classId.value,author_profile_id:authState.profile.id,event_type:eventType.value,title:title.value.trim(),event_date:eventDate.value,start_time:startTime.value||null,duration_minutes:startTime.value?Number(durationMinutes.value||60):null,meeting_url:meetingUrl.value.trim()||null,details:details.value.trim()||null}).select().single();saveButton.disabled=false;if(error){formMessage.textContent=error.message;return;}events.push(data);events.sort((a,b)=>(a.event_date+(a.start_time||"")).localeCompare(b.event_date+(b.start_time||"")));eventForm.reset();durationMinutes.value=60;render();formMessage.textContent="Kalenderposten er gemt og synlig i familiens Campus.";});
+    eventList.addEventListener("click",async e=>{const b=e.target.closest("[data-delete]");if(!b)return;if(!confirm("Vil du slette kalenderposten?"))return;const {error}=await supabaseClient.from("calendar_events").delete().eq("id",b.dataset.delete);if(error){alert(error.message);return;}events=events.filter(item=>item.id!==b.dataset.delete);render();});
+    (async()=>{authState=await requireRole(["admin","teacher"]);if(!authState)return;loading.remove();app.hidden=false;await load();})();
+  </script>
+</body></html>
