@@ -131,6 +131,10 @@ drop policy if exists "Families read own students" on public.students;
 create policy "Families read own students" on public.students
 for select to authenticated using (id in (select public.current_student_ids()));
 
+drop policy if exists "Staff read students" on public.students;
+create policy "Staff read students" on public.students
+for select to authenticated using (public.is_staff());
+
 grant select, insert, update on public.students to authenticated;
 
 -- Hold og elevtilknytninger.
@@ -169,6 +173,10 @@ with check (public.is_admin());
 drop policy if exists "Families read own enrollments" on public.class_enrollments;
 create policy "Families read own enrollments" on public.class_enrollments
 for select to authenticated using (student_id in (select public.current_student_ids()));
+
+drop policy if exists "Staff read class enrollments" on public.class_enrollments;
+create policy "Staff read class enrollments" on public.class_enrollments
+for select to authenticated using (public.is_staff());
 
 drop policy if exists "Members read enrolled classes" on public.classes;
 create policy "Members read enrolled classes" on public.classes
@@ -273,6 +281,31 @@ create policy "Staff read classes" on public.classes
 for select to authenticated using (public.is_staff());
 
 grant select, insert, update, delete on public.learning_items to authenticated;
+
+-- Personlig feedback til elever og familier.
+create table if not exists public.student_feedback (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid not null references public.students(id) on delete cascade,
+  class_id uuid references public.classes(id) on delete set null,
+  author_profile_id uuid references public.profiles(id) on delete set null,
+  focus text not null,
+  feedback_text text not null,
+  next_step text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.student_feedback enable row level security;
+
+drop policy if exists "Staff manage student feedback" on public.student_feedback;
+create policy "Staff manage student feedback" on public.student_feedback
+for all to authenticated using (public.is_staff())
+with check (public.is_staff());
+
+drop policy if exists "Families read own feedback" on public.student_feedback;
+create policy "Families read own feedback" on public.student_feedback
+for select to authenticated using (student_id in (select public.current_student_ids()));
+
+grant select, insert, update, delete on public.student_feedback to authenticated;
 
 -- Privat filområde til materialer og lektier. Filer åbnes via tidsbegrænsede links.
 insert into storage.buckets (id, name, public, file_size_limit)

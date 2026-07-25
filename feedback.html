@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Feedback · Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .feedback-layout{display:grid;grid-template-columns:minmax(320px,.75fr) minmax(0,1.25fr);gap:16px}
+    .form-grid{display:grid;gap:14px}
+    .form-grid label{display:grid;gap:7px;font-weight:750}
+    .form-grid input,.form-grid select,.form-grid textarea{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff;font:inherit}
+    .form-grid textarea{min-height:120px;resize:vertical}
+    .feedback-list{display:grid;gap:12px}
+    .feedback-card{display:grid;gap:12px}
+    .feedback-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+    .feedback-head h2{font-family:Georgia,serif;font-weight:500;font-size:24px;margin:3px 0}
+    .next-step{padding:13px;border-radius:12px;background:var(--brand-soft);color:var(--brand)}
+    .danger{color:#a33;border-color:#ead2d2}
+    @media(max-width:900px){.feedback-layout{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Åbner feedback…</div>
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="index.html">Substans</a>
+      <nav class="nav">
+        <a href="admin.html">Ansøgninger</a>
+        <a href="students.html">Elever</a>
+        <a href="classes.html">Hold</a>
+        <a href="teachers.html">Undervisere</a>
+        <a href="attendance.html">Fremmøde</a>
+        <a href="resources.html">Materialer</a>
+        <a class="active" href="feedback.html">Feedback</a>
+        <a href="accounts.html">Kontoadgang</a>
+      </nav>
+      <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div><span class="eyebrow">Elevens udvikling</span><h1 class="title">Personlig feedback</h1><p class="muted">Gør elevens fremskridt og næste skridt tydeligt for familien.</p></div>
+        <span class="badge">Substans Campus</span>
+      </header>
+      <section class="feedback-layout">
+        <article class="card">
+          <span class="eyebrow">Ny feedback</span>
+          <h2 style="font-family:Georgia,serif;font-size:28px;font-weight:500">Skriv til eleven og familien</h2>
+          <form id="feedbackForm" class="form-grid">
+            <label>Hold<select id="classId" required><option value="">Vælg hold</option></select></label>
+            <label>Elev<select id="studentId" required disabled><option value="">Vælg først et hold</option></select></label>
+            <label>Fokus<input id="focus" required maxlength="120" placeholder="Fx Aktiv deltagelse i Sīrah"></label>
+            <label>Observation<textarea id="feedbackText" required maxlength="2000" placeholder="Hvad lykkedes eleven med?"></textarea></label>
+            <label>Næste skridt<textarea id="nextStep" maxlength="1000" placeholder="Hvad kan eleven arbejde videre med?"></textarea></label>
+            <button id="saveButton" class="button" type="submit">Gem feedback</button>
+            <p id="formMessage" class="muted" role="status"></p>
+          </form>
+        </article>
+        <div>
+          <div class="topbar" style="margin-bottom:12px"><div><span class="eyebrow">Historik</span><h2 style="margin:4px 0">Seneste feedback</h2></div></div>
+          <div id="feedbackList" class="feedback-list"><article class="card empty">Indlæser feedback…</article></div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    let authState;
+    let classes = [];
+    let students = [];
+    let enrollments = [];
+    let feedbackRows = [];
+
+    function studentName(id){ return students.find(item => item.id === id)?.full_name || "Elev"; }
+    function className(id){ return classes.find(item => item.id === id)?.name || "Hold"; }
+
+    function renderStudents(){
+      const ids = enrollments.filter(item => item.class_id === classId.value).map(item => item.student_id);
+      const available = students.filter(item => ids.includes(item.id));
+      studentId.disabled = !available.length;
+      studentId.innerHTML = available.length
+        ? '<option value="">Vælg elev</option>' + available.map(item => `<option value="${item.id}">${escapeHtml(item.full_name)}</option>`).join("")
+        : '<option value="">Ingen elever på holdet</option>';
+    }
+
+    function renderFeedback(){
+      feedbackList.innerHTML = feedbackRows.length ? feedbackRows.map(item => `
+        <article class="card feedback-card">
+          <div class="feedback-head">
+            <div><span class="eyebrow">${escapeHtml(studentName(item.student_id))} · ${escapeHtml(className(item.class_id))}</span><h2>${escapeHtml(item.focus)}</h2><small class="muted">${new Date(item.created_at).toLocaleDateString("da-DK",{day:"numeric",month:"long",year:"numeric"})}</small></div>
+            <button class="button secondary danger" type="button" data-delete="${item.id}">Slet</button>
+          </div>
+          <p>${escapeHtml(item.feedback_text)}</p>
+          ${item.next_step ? `<div class="next-step"><b>Næste skridt</b><br>${escapeHtml(item.next_step)}</div>` : ""}
+        </article>`).join("")
+        : '<article class="card empty">Der er endnu ikke skrevet feedback.</article>';
+    }
+
+    async function loadData(){
+      const [classResult, studentResult, enrollmentResult, feedbackResult] = await Promise.all([
+        supabaseClient.from("classes").select("id,name").order("name"),
+        supabaseClient.from("students").select("id,full_name").order("full_name"),
+        supabaseClient.from("class_enrollments").select("class_id,student_id"),
+        supabaseClient.from("student_feedback").select("*").order("created_at",{ascending:false})
+      ]);
+      const error = classResult.error || studentResult.error || enrollmentResult.error || feedbackResult.error;
+      if(error){ formMessage.textContent = error.message; return; }
+      classes = classResult.data || []; students = studentResult.data || []; enrollments = enrollmentResult.data || []; feedbackRows = feedbackResult.data || [];
+      classId.innerHTML = '<option value="">Vælg hold</option>' + classes.map(item => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("");
+      renderFeedback();
+    }
+
+    classId.addEventListener("change",renderStudents);
+    feedbackForm.addEventListener("submit",async event => {
+      event.preventDefault();
+      saveButton.disabled = true; formMessage.textContent = "Gemmer…";
+      const {data,error} = await supabaseClient.from("student_feedback").insert({
+        student_id:studentId.value,class_id:classId.value,author_profile_id:authState.profile.id,
+        focus:focus.value.trim(),feedback_text:feedbackText.value.trim(),next_step:nextStep.value.trim() || null
+      }).select().single();
+      saveButton.disabled = false;
+      if(error){ formMessage.textContent = error.message; return; }
+      feedbackRows.unshift(data); feedbackForm.reset(); renderStudents(); renderFeedback();
+      formMessage.textContent = "Feedbacken er gemt og kan nu ses i familiens Campus.";
+    });
+    feedbackList.addEventListener("click",async event => {
+      const button = event.target.closest("[data-delete]"); if(!button) return;
+      if(!confirm("Vil du slette denne feedback?")) return;
+      const {error} = await supabaseClient.from("student_feedback").delete().eq("id",button.dataset.delete);
+      if(error){ alert(error.message); return; }
+      feedbackRows = feedbackRows.filter(item => item.id !== button.dataset.delete); renderFeedback();
+    });
+
+    (async()=>{
+      authState = await requireRole(["admin","teacher"]); if(!authState) return;
+      loading.remove(); app.hidden=false; await loadData();
+    })();
+  </script>
+</body>
+</html>
