@@ -307,6 +307,30 @@ for select to authenticated using (student_id in (select public.current_student_
 
 grant select, insert, update, delete on public.student_feedback to authenticated;
 
+-- Meddelelser fra skolen til familier på et hold.
+create table if not exists public.class_messages (
+  id uuid primary key default gen_random_uuid(),
+  class_id uuid not null references public.classes(id) on delete cascade,
+  author_profile_id uuid references public.profiles(id) on delete set null,
+  title text not null,
+  body text not null,
+  is_important boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+alter table public.class_messages enable row level security;
+
+drop policy if exists "Staff manage class messages" on public.class_messages;
+create policy "Staff manage class messages" on public.class_messages
+for all to authenticated using (public.is_staff())
+with check (public.is_staff());
+
+drop policy if exists "Members read class messages" on public.class_messages;
+create policy "Members read class messages" on public.class_messages
+for select to authenticated using (public.can_access_class(class_id));
+
+grant select, insert, update, delete on public.class_messages to authenticated;
+
 -- Privat filområde til materialer og lektier. Filer åbnes via tidsbegrænsede links.
 insert into storage.buckets (id, name, public, file_size_limit)
 values ('learning-attachments', 'learning-attachments', false, 52428800)

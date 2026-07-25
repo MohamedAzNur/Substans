@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Beskeder · Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .message-layout{display:grid;grid-template-columns:minmax(320px,.72fr) minmax(0,1.28fr);gap:16px}
+    .form-grid{display:grid;gap:14px}
+    .form-grid label{display:grid;gap:7px;font-weight:750}
+    .form-grid input,.form-grid select,.form-grid textarea{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff;font:inherit}
+    .form-grid textarea{min-height:150px;resize:vertical}
+    .message-list{display:grid;gap:12px}
+    .message-card{display:grid;gap:12px}
+    .message-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+    .message-head h2{font-family:Georgia,serif;font-weight:500;font-size:24px;margin:3px 0}
+    .priority{background:#fff2df;color:#8a5300}
+    .danger{color:#a33;border-color:#ead2d2}
+    @media(max-width:900px){.message-layout{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Åbner beskeder…</div>
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="index.html">Substans</a>
+      <nav class="nav">
+        <a href="admin.html">Ansøgninger</a>
+        <a href="students.html">Elever</a>
+        <a href="classes.html">Hold</a>
+        <a href="teachers.html">Undervisere</a>
+        <a href="attendance.html">Fremmøde</a>
+        <a href="resources.html">Materialer</a>
+        <a href="feedback.html">Feedback</a>
+        <a class="active" href="messages.html">Beskeder</a>
+        <a href="accounts.html">Kontoadgang</a>
+      </nav>
+      <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div><span class="eyebrow">Kommunikation</span><h1 class="title">Beskeder til familier</h1><p class="muted">Del korte og tydelige meddelelser med et helt hold.</p></div>
+        <span class="badge">Substans Campus</span>
+      </header>
+      <section class="message-layout">
+        <article class="card">
+          <span class="eyebrow">Ny besked</span>
+          <h2 style="font-family:Georgia,serif;font-size:28px;font-weight:500">Skriv til et hold</h2>
+          <form id="messageForm" class="form-grid">
+            <label>Hold<select id="classId" required><option value="">Vælg hold</option></select></label>
+            <label>Overskrift<input id="title" required maxlength="140" placeholder="Fx Ændret undervisningstid"></label>
+            <label>Besked<textarea id="body" required maxlength="3000" placeholder="Skriv den information, familien har brug for…"></textarea></label>
+            <label style="display:flex;grid-template-columns:auto 1fr;align-items:center"><input id="important" type="checkbox" style="width:auto"> Markér som vigtig</label>
+            <button id="sendButton" class="button" type="submit">Send besked</button>
+            <p id="formMessage" class="muted" role="status"></p>
+          </form>
+        </article>
+        <div>
+          <div class="topbar" style="margin-bottom:12px"><div><span class="eyebrow">Sendt</span><h2 style="margin:4px 0">Seneste beskeder</h2></div></div>
+          <div id="messageList" class="message-list"><article class="card empty">Indlæser beskeder…</article></div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    let authState;
+    let classes = [];
+    let messages = [];
+    function className(id){return classes.find(item=>item.id===id)?.name||"Hold";}
+    function renderMessages(){
+      messageList.innerHTML=messages.length?messages.map(item=>`
+        <article class="card message-card">
+          <div class="message-head">
+            <div><span class="eyebrow">${escapeHtml(className(item.class_id))}</span><h2>${escapeHtml(item.title)}</h2><small class="muted">${new Date(item.created_at).toLocaleString("da-DK",{dateStyle:"long",timeStyle:"short"})}</small></div>
+            <div style="display:flex;gap:8px;align-items:center">${item.is_important?'<span class="badge priority">Vigtig</span>':""}<button class="button secondary danger" type="button" data-delete="${item.id}">Slet</button></div>
+          </div>
+          <p>${escapeHtml(item.body).replace(/\n/g,"<br>")}</p>
+        </article>`).join(""):'<article class="card empty">Der er endnu ikke sendt beskeder.</article>';
+    }
+    async function loadData(){
+      const [classResult,messageResult]=await Promise.all([
+        supabaseClient.from("classes").select("id,name").order("name"),
+        supabaseClient.from("class_messages").select("*").order("created_at",{ascending:false})
+      ]);
+      const error=classResult.error||messageResult.error;
+      if(error){formMessage.textContent=error.message;return;}
+      classes=classResult.data||[];messages=messageResult.data||[];
+      classId.innerHTML='<option value="">Vælg hold</option>'+classes.map(item=>`<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("");
+      renderMessages();
+    }
+    messageForm.addEventListener("submit",async event=>{
+      event.preventDefault();sendButton.disabled=true;formMessage.textContent="Sender…";
+      const {data,error}=await supabaseClient.from("class_messages").insert({
+        class_id:classId.value,author_profile_id:authState.profile.id,title:title.value.trim(),body:body.value.trim(),is_important:important.checked
+      }).select().single();
+      sendButton.disabled=false;
+      if(error){formMessage.textContent=error.message;return;}
+      messages.unshift(data);messageForm.reset();renderMessages();formMessage.textContent="Beskeden er sendt og kan nu ses i familiens Campus.";
+    });
+    messageList.addEventListener("click",async event=>{
+      const button=event.target.closest("[data-delete]");if(!button)return;
+      if(!confirm("Vil du slette denne besked?"))return;
+      const {error}=await supabaseClient.from("class_messages").delete().eq("id",button.dataset.delete);
+      if(error){alert(error.message);return;}
+      messages=messages.filter(item=>item.id!==button.dataset.delete);renderMessages();
+    });
+    (async()=>{authState=await requireRole(["admin","teacher"]);if(!authState)return;loading.remove();app.hidden=false;await loadData();})();
+  </script>
+</body>
+</html>

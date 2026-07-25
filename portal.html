@@ -25,6 +25,10 @@
     .feedback-card{display:grid;gap:12px}
     .feedback-card h2{font-family:Georgia,serif;font-weight:500;font-size:24px;margin:3px 0}
     .next-step{padding:13px;border-radius:12px;background:var(--brand-soft);color:var(--brand)}
+    .message-list{display:grid;gap:12px}
+    .message-card{display:grid;gap:10px}
+    .message-card h2{font-family:Georgia,serif;font-weight:500;font-size:24px;margin:3px 0}
+    .priority{background:#fff2df;color:#8a5300}
     @media(max-width:900px){.campus-grid{grid-template-columns:1fr}}
   </style>
 </head>
@@ -38,6 +42,7 @@
         <a class="active" href="portal.html">Mit overblik</a>
         <a href="#learning">Materialer og lektier</a>
         <a href="#feedback">Feedback</a>
+        <a href="#messages">Beskeder</a>
         <a id="teacherResources" href="resources.html" hidden>Del materiale</a>
         <a id="adminLink" href="admin.html" hidden>Administration</a>
       </nav>
@@ -63,6 +68,11 @@
       <section id="feedback" style="margin-top:28px">
         <div class="topbar"><div><span class="eyebrow">Personlig udvikling</span><h2 style="margin:4px 0">Seneste feedback</h2><p class="muted">Underviserens observationer og tydelige næste skridt.</p></div></div>
         <div id="feedbackList" class="feedback-list"><article class="card empty">Der er endnu ikke skrevet feedback.</article></div>
+      </section>
+
+      <section id="messages" style="margin-top:28px">
+        <div class="topbar"><div><span class="eyebrow">Fra Substans</span><h2 style="margin:4px 0">Beskeder</h2><p class="muted">Praktiske meddelelser fra underviseren og administrationen.</p></div></div>
+        <div id="messageList" class="message-list"><article class="card empty">Der er ingen nye beskeder.</article></div>
       </section>
 
       <section id="learning" class="campus-grid" style="margin-top:16px">
@@ -96,6 +106,7 @@
     let classes = [];
     let students = [];
     let feedbackRows = [];
+    let messages = [];
     let activeFilter = "all";
 
     function labelFor(kind) {
@@ -154,22 +165,37 @@
       }).join("") : '<article class="card empty">Der er endnu ikke skrevet feedback.</article>';
     }
 
+    function renderMessages(){
+      messageList.innerHTML=messages.length?messages.map(item=>{
+        const itemClass=classes.find(entry=>entry.id===item.class_id);
+        return `<article class="card message-card">
+          <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start">
+            <div><span class="eyebrow">${escapeHtml(itemClass?.name||"Hold")}</span><h2>${escapeHtml(item.title)}</h2><small class="muted">${new Date(item.created_at).toLocaleString("da-DK",{dateStyle:"long",timeStyle:"short"})}</small></div>
+            ${item.is_important?'<span class="badge priority">Vigtig</span>':""}
+          </div>
+          <p>${escapeHtml(item.body).replace(/\n/g,"<br>")}</p>
+        </article>`;
+      }).join(""):'<article class="card empty">Der er ingen nye beskeder.</article>';
+    }
+
     async function loadCampus(auth) {
       const role = auth.profile.role;
       const email = auth.session.user.email;
       let classIds = [];
 
       if (role === "admin" || role === "teacher") {
-        const [classResult, learningResult, studentResult, feedbackResult] = await Promise.all([
+        const [classResult, learningResult, studentResult, feedbackResult, messageResult] = await Promise.all([
           supabaseClient.from("classes").select("id,name").order("name"),
           supabaseClient.from("learning_items").select("*").order("created_at", { ascending:false }),
           supabaseClient.from("students").select("id,full_name").order("full_name"),
-          supabaseClient.from("student_feedback").select("*").order("created_at",{ascending:false})
+          supabaseClient.from("student_feedback").select("*").order("created_at",{ascending:false}),
+          supabaseClient.from("class_messages").select("*").order("created_at",{ascending:false})
         ]);
         classes = classResult.data || [];
         learningItems = learningResult.data || [];
         students = studentResult.data || [];
         feedbackRows = feedbackResult.data || [];
+        messages = messageResult.data || [];
       } else {
         const { data: studentRows } = await supabaseClient
           .from("students")
@@ -185,14 +211,16 @@
           classIds = [...new Set((enrollmentRows || []).map(item => item.class_id))];
         }
         if (classIds.length) {
-          const [classResult, learningResult, feedbackResult] = await Promise.all([
+          const [classResult, learningResult, feedbackResult, messageResult] = await Promise.all([
             supabaseClient.from("classes").select("id,name").in("id", classIds).order("name"),
             supabaseClient.from("learning_items").select("*").in("class_id", classIds).order("created_at", { ascending:false }),
-            supabaseClient.from("student_feedback").select("*").in("student_id",students.map(student => student.id)).order("created_at",{ascending:false})
+            supabaseClient.from("student_feedback").select("*").in("student_id",students.map(student => student.id)).order("created_at",{ascending:false}),
+            supabaseClient.from("class_messages").select("*").in("class_id",classIds).order("created_at",{ascending:false})
           ]);
           classes = classResult.data || [];
           learningItems = learningResult.data || [];
           feedbackRows = feedbackResult.data || [];
+          messages = messageResult.data || [];
         }
       }
 
@@ -202,6 +230,7 @@
       homeworkCount.textContent = learningItems.filter(item => item.kind === "homework" && (!item.due_date || item.due_date >= today)).length;
       await renderLearning();
       renderFeedback();
+      renderMessages();
     }
 
     document.querySelector(".tabs").addEventListener("click", event => {
