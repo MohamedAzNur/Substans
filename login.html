@@ -81,7 +81,7 @@
         .select("role")
         .eq("id", session.user.id)
         .single();
-      window.location.replace(profile?.role === "admin" ? "admin.html" : "portal.html");
+      window.location.replace(profile?.role === "admin" ? "admin.html" : (profile?.role === "teacher" ? "teacher.html" : "portal.html"));
     }
 
     route();

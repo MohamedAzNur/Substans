@@ -40,6 +40,7 @@
         <a href="feedback.html">Feedback</a>
         <a href="messages.html">Beskeder</a>
         <a href="payments.html">Betalinger</a>
+        <a href="calendar.html">Kalender</a>
         <a href="accounts.html">Kontoadgang</a>
       </nav>
       <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
@@ -48,7 +49,7 @@
     <main class="main">
       <header class="topbar">
         <div>
-          <span class="eyebrow">Administration</span>
+          <span id="roleLabel" class="eyebrow">Undervisning</span>
           <h1 class="title">Lektioner og fremmøde</h1>
           <p class="muted">Opret undervisningsgange og registrér elevernes fremmøde.</p>
         </div>
@@ -219,9 +220,11 @@
     });
 
     (async () => {
-      const auth = await requireRole(["admin"]);
+      const auth = await requireRole(["admin","teacher"]);
       if (!auth) return;
-      adminName.textContent = auth.profile.full_name || "Administrator";
+      const isTeacher = auth.profile.role === "teacher";
+      adminName.textContent = auth.profile.full_name || (isTeacher ? "Underviser" : "Administrator");
+      roleLabel.textContent = isTeacher ? "Mit lærerbord" : "Administration";
       lessonDate.valueAsDate = new Date();
       loading.remove();
       app.hidden = false;

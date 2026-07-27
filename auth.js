@@ -5,6 +5,12 @@ async function getSessionProfile() {
   return { session, profile };
 }
 
+function homeForRole(role) {
+  if (role === "admin") return "admin.html";
+  if (role === "teacher") return "teacher.html";
+  return "portal.html";
+}
+
 async function requireRole(allowedRoles) {
   const { session, profile } = await getSessionProfile();
   if (!session) {
@@ -12,9 +18,10 @@ async function requireRole(allowedRoles) {
     return null;
   }
   if (!profile || !allowedRoles.includes(profile.role)) {
-    window.location.replace(profile?.role === "admin" ? "admin.html" : "portal.html");
+    window.location.replace(homeForRole(profile?.role));
     return null;
   }
+  setupCampusNavigation(profile.role);
   return { session, profile };
 }
 
@@ -29,13 +36,11 @@ function escapeHtml(value) {
   })[char]);
 }
 
-function setupCampusNavigation() {
+function setupCampusNavigation(role = null) {
   const sidebar = document.querySelector(".sidebar");
   const nav = sidebar?.querySelector(".nav");
   const brand = sidebar?.querySelector(".brand");
-  if (!sidebar || !nav || !brand || sidebar.dataset.navigationReady === "true") return;
-
-  sidebar.dataset.navigationReady = "true";
+  if (!sidebar || !nav || !brand) return;
 
   const adminMenu = [
     {
@@ -73,10 +78,38 @@ function setupCampusNavigation() {
     }
   ];
 
+  const teacherMenu = [
+    {
+      label: "Overblik",
+      links: [
+        ["teacher.html", "Mit lærerbord"],
+        ["portal.html", "Mit Campus"]
+      ]
+    },
+    {
+      label: "Undervisning",
+      links: [
+        ["attendance.html", "Fremmøde"],
+        ["resources.html", "Materialer og lektier"],
+        ["progress.html", "Faglig udvikling"],
+        ["calendar.html", "Kalender"]
+      ]
+    },
+    {
+      label: "Samarbejde",
+      links: [
+        ["feedback.html", "Feedback"],
+        ["messages.html", "Beskeder"]
+      ]
+    }
+  ];
+
+  const originalLinks = [...nav.querySelectorAll("a")];
   const isAdminNavigation = Boolean(nav.querySelector('a[href="admin.html"]'))
     && Boolean(nav.querySelector('a[href="students.html"]'));
+  const isTeacherNavigation = Boolean(nav.querySelector('a[href="teacher.html"]'));
 
-  const existingLinks = [...nav.querySelectorAll("a")].map(link => [
+  const existingLinks = originalLinks.map(link => [
     link.getAttribute("href") || "#",
     link.textContent.trim()
   ]);
@@ -99,7 +132,9 @@ function setupCampusNavigation() {
     }
   ].filter(section => section.links.length);
 
-  const menu = isAdminNavigation ? adminMenu : portalMenu;
+  const menuKey = role || (isTeacherNavigation ? "teacher" : (isAdminNavigation ? "admin" : "portal"));
+  if (nav.dataset.menuKey === menuKey) return;
+  const menu = menuKey === "admin" ? adminMenu : (menuKey === "teacher" ? teacherMenu : portalMenu);
   const currentFile = window.location.pathname.split("/").pop() || "portal.html";
   const currentHash = window.location.hash;
 
@@ -114,6 +149,11 @@ function setupCampusNavigation() {
       }).join("")}
     </div>
   `).join("");
+  nav.dataset.menuKey = menuKey;
+
+  nav.id = "campus-navigation";
+  if (sidebar.dataset.navigationReady === "true") return;
+  sidebar.dataset.navigationReady = "true";
 
   const menuButton = document.createElement("button");
   menuButton.type = "button";
@@ -121,10 +161,8 @@ function setupCampusNavigation() {
   menuButton.setAttribute("aria-expanded", "false");
   menuButton.setAttribute("aria-controls", "campus-navigation");
   menuButton.innerHTML = '<span class="menu-toggle-icon" aria-hidden="true"><i></i><i></i><i></i></span><span>Menu</span>';
-  nav.id = "campus-navigation";
   brand.insertAdjacentElement("afterend", menuButton);
   sidebar.classList.add("has-menu-toggle");
-
   const closeMenu = () => {
     nav.classList.remove("is-open");
     menuButton.setAttribute("aria-expanded", "false");

@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Mit lærerbord · Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .teacher-hero{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);gap:16px;margin-bottom:16px}
+    .next-lesson{position:relative;overflow:hidden;background:linear-gradient(135deg,#18362c 0%,#285747 100%);color:#fff;border:0}
+    .next-lesson::after{content:"";position:absolute;width:220px;height:220px;border-radius:50%;right:-90px;top:-120px;background:rgba(255,255,255,.07)}
+    .next-lesson .eyebrow,.next-lesson .muted{color:#b9cec5}.next-lesson h2{font-family:Georgia,serif;font-size:34px;font-weight:500;line-height:1.1;margin:8px 0}
+    .lesson-meta{display:flex;gap:9px;flex-wrap:wrap;margin:18px 0}.lesson-meta span{padding:7px 10px;border-radius:999px;background:rgba(255,255,255,.11);font-size:13px;font-weight:750}
+    .hero-actions,.quick-actions{display:flex;gap:9px;flex-wrap:wrap}.next-lesson .button{background:#fff;color:#17372c}.next-lesson .button.secondary{background:transparent;color:#fff;border-color:rgba(255,255,255,.28)}
+    .day-plan{display:grid;gap:12px}.day-item{display:grid;grid-template-columns:42px minmax(0,1fr);gap:12px;align-items:start}.day-icon{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:var(--brand-soft);color:var(--brand);font-weight:850}.day-item h3{margin:0 0 3px;font-size:15px}
+    .teacher-layout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(300px,.75fr);gap:16px}
+    .section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:26px 0 12px}.section-head h2{font-family:Georgia,serif;font-size:30px;font-weight:500;margin:4px 0}
+    .class-list{display:grid;gap:12px}.class-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:start}.class-card h3{font-family:Georgia,serif;font-size:25px;font-weight:500;margin:4px 0}.class-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.class-meta span{padding:6px 9px;border-radius:999px;background:var(--brand-soft);color:var(--brand);font-size:12px;font-weight:750}
+    .action-panel{position:sticky;top:24px}.action-grid{display:grid;gap:9px;margin-top:16px}.action-link{display:grid;grid-template-columns:38px minmax(0,1fr) auto;align-items:center;gap:11px;padding:12px;border:1px solid var(--line);border-radius:13px;background:#fff}.action-link:hover{border-color:#aabdb3;background:#f8faf9}.action-mark{display:grid;place-items:center;width:38px;height:38px;border-radius:11px;background:var(--brand-soft);color:var(--brand);font-weight:850}.action-link strong{display:block}.action-link small{color:var(--muted)}.arrow{color:var(--muted);font-size:20px}
+    .setup-notice{border-left:4px solid #c89536;background:#fff8e8}.setup-notice h2{font-family:Georgia,serif;font-weight:500;margin:6px 0}
+    @media(max-width:1050px){.teacher-hero,.teacher-layout{grid-template-columns:1fr}.action-panel{position:static}}
+    @media(max-width:620px){.class-card{grid-template-columns:1fr}.next-lesson h2{font-size:29px}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Åbner dit lærerbord…</div>
+
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="index.html">Substans</a>
+      <nav class="nav">
+        <a class="active" href="teacher.html">Mit lærerbord</a>
+        <a href="portal.html">Mit Campus</a>
+        <a href="attendance.html">Fremmøde</a>
+        <a href="resources.html">Materialer og lektier</a>
+        <a href="progress.html">Faglig udvikling</a>
+        <a href="calendar.html">Kalender</a>
+        <a href="feedback.html">Feedback</a>
+        <a href="messages.html">Beskeder</a>
+      </nav>
+      <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <span class="eyebrow">Underviser</span>
+          <h1 class="title">Assalamu alaikum, <span id="teacherName">underviser</span>.</h1>
+          <p class="muted">Herfra kan du forberede, undervise og følge eleverne — samlet ét sted.</p>
+        </div>
+        <span class="badge">Mit lærerbord</span>
+      </header>
+
+      <div id="setupNotice" class="card setup-notice" hidden>
+        <span class="eyebrow">Kontoen mangler en tilknytning</span>
+        <h2>Forbind din bruger med en underviserprofil</h2>
+        <p class="muted">En administrator skal åbne Kontoadgang og forbinde denne konto med den rigtige underviser. Derefter vises dine hold automatisk her.</p>
+      </div>
+
+      <section id="dashboardContent">
+        <div class="teacher-hero">
+          <article id="nextLesson" class="card next-lesson">
+            <span class="eyebrow">Næste undervisning</span>
+            <h2>Ingen planlagt lektion endnu</h2>
+            <p class="muted">Opret næste undervisning i kalenderen, så den bliver synlig for både dig og familierne.</p>
+            <div class="hero-actions"><a class="button" href="calendar.html">Planlæg lektion</a></div>
+          </article>
+
+          <article class="card">
+            <span class="eyebrow">Dagens fokus</span>
+            <h2 style="font-family:Georgia,serif;font-size:27px;font-weight:500;margin:6px 0 16px">Klar til undervisning</h2>
+            <div class="day-plan">
+              <div class="day-item"><span class="day-icon">1</span><div><h3>Tjek næste lektion</h3><small class="muted">Tid, mødelink og dagens emne.</small></div></div>
+              <div class="day-item"><span class="day-icon">2</span><div><h3>Registrér fremmøde</h3><small class="muted">Gør det under eller lige efter timen.</small></div></div>
+              <div class="day-item"><span class="day-icon">3</span><div><h3>Del næste skridt</h3><small class="muted">Lektier, feedback eller en besked.</small></div></div>
+            </div>
+          </article>
+        </div>
+
+        <section class="grid">
+          <article class="card stat"><span class="muted">Mine hold</span><strong id="classCount">—</strong></article>
+          <article class="card stat"><span class="muted">Mine elever</span><strong id="studentCount">—</strong></article>
+          <article class="card stat"><span class="muted">Åbne lektier</span><strong id="homeworkCount">—</strong></article>
+        </section>
+
+        <div class="teacher-layout">
+          <div>
+            <div class="section-head">
+              <div><span class="eyebrow">Undervisningen</span><h2>Mine hold</h2></div>
+            </div>
+            <div id="classList" class="class-list"><article class="card empty">Henter dine hold…</article></div>
+          </div>
+
+          <aside class="card action-panel">
+            <span class="eyebrow">Hurtige handlinger</span>
+            <h2 style="font-family:Georgia,serif;font-size:28px;font-weight:500;margin:6px 0">Hvad vil du gøre?</h2>
+            <div class="action-grid">
+              <a class="action-link" href="attendance.html"><span class="action-mark">F</span><span><strong>Registrér fremmøde</strong><small>Opret lektion og markér elever</small></span><span class="arrow">›</span></a>
+              <a class="action-link" href="resources.html"><span class="action-mark">L</span><span><strong>Giv lektier</strong><small>Vedhæft PDF, Word, video eller link</small></span><span class="arrow">›</span></a>
+              <a class="action-link" href="feedback.html"><span class="action-mark">V</span><span><strong>Skriv feedback</strong><small>Observation og elevens næste skridt</small></span><span class="arrow">›</span></a>
+              <a class="action-link" href="messages.html"><span class="action-mark">B</span><span><strong>Send besked</strong><small>Kommunikér med et helt hold</small></span><span class="arrow">›</span></a>
+              <a class="action-link" href="calendar.html"><span class="action-mark">K</span><span><strong>Planlæg undervisning</strong><small>Tidspunkt og sikkert mødelink</small></span><span class="arrow">›</span></a>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    let authState;
+    let teacher;
+    let classes = [];
+    let enrollments = [];
+    let students = [];
+    let learningItems = [];
+    let events = [];
+
+    function formatSchedule(item) {
+      const parts = [];
+      if (item.weekday) parts.push(item.weekday);
+      if (item.start_time) parts.push(`kl. ${item.start_time.slice(0,5)}`);
+      return parts.join(" ") || "Tidspunkt ikke fastlagt";
+    }
+
+    function renderNextLesson() {
+      const item = events[0];
+      if (!item) return;
+      const itemClass = classes.find(entry => entry.id === item.class_id);
+      const date = new Date(item.event_date + "T12:00:00");
+      nextLesson.innerHTML = `
+        <span class="eyebrow">Næste undervisning</span>
+        <h2>${escapeHtml(item.title)}</h2>
+        <p class="muted">${escapeHtml(itemClass?.name || "Hold")} · ${date.toLocaleDateString("da-DK",{weekday:"long",day:"numeric",month:"long"})}${item.start_time ? ` kl. ${escapeHtml(item.start_time.slice(0,5))}` : ""}</p>
+        ${item.details ? `<p>${escapeHtml(item.details)}</p>` : ""}
+        <div class="lesson-meta">
+          <span>${escapeHtml(itemClass?.name || "Hold")}</span>
+          <span>${escapeHtml(item.event_type === "lesson" ? "Undervisning" : "Aktivitet")}</span>
+        </div>
+        <div class="hero-actions">
+          ${item.meeting_url ? `<a class="button" href="${escapeHtml(item.meeting_url)}" target="_blank" rel="noopener">Deltag i undervisningen</a>` : `<a class="button" href="calendar.html">Tilføj mødelink</a>`}
+          <a class="button secondary" href="attendance.html">Åbn fremmøde</a>
+        </div>`;
+    }
+
+    function renderClasses() {
+      classList.innerHTML = classes.length ? classes.map(item => {
+        const memberIds = enrollments.filter(entry => entry.class_id === item.id).map(entry => entry.student_id);
+        const upcoming = events.find(entry => entry.class_id === item.id);
+        return `<article class="card class-card">
+          <div>
+            <span class="eyebrow">Mit hold</span>
+            <h3>${escapeHtml(item.name)}</h3>
+            <p class="muted">${escapeHtml(formatSchedule(item))}</p>
+            <div class="class-meta">
+              <span>${memberIds.length} ${memberIds.length === 1 ? "elev" : "elever"}</span>
+              <span>${upcoming ? `Næste: ${new Date(upcoming.event_date+"T12:00:00").toLocaleDateString("da-DK",{day:"numeric",month:"short"})}` : "Ingen kommende lektion"}</span>
+            </div>
+          </div>
+          <div class="quick-actions">
+            <a class="button secondary" href="resources.html">Lektier</a>
+            <a class="button secondary" href="feedback.html">Feedback</a>
+          </div>
+        </article>`;
+      }).join("") : '<article class="card empty">Du er endnu ikke tilknyttet et hold.</article>';
+    }
+
+    async function loadTeacherDashboard() {
+      const isAdmin = authState.profile.role === "admin";
+      let teacherId = null;
+
+      if (!isAdmin) {
+        const { data, error } = await supabaseClient
+          .from("teachers")
+          .select("id,full_name,profile_id")
+          .eq("profile_id", authState.profile.id)
+          .maybeSingle();
+        if (error) {
+          setupNotice.hidden = false;
+          dashboardContent.hidden = true;
+          return;
+        }
+        teacher = data;
+        teacherId = teacher?.id || null;
+        if (!teacherId) {
+          setupNotice.hidden = false;
+          dashboardContent.hidden = true;
+          return;
+        }
+      }
+
+      let classQuery = supabaseClient.from("classes").select("id,name,weekday,start_time,teacher_id,status").eq("status","active").order("name");
+      if (teacherId) classQuery = classQuery.eq("teacher_id", teacherId);
+      const { data: classRows, error: classError } = await classQuery;
+      if (classError) {
+        classList.innerHTML = '<article class="card empty">Dine hold kunne ikke hentes.</article>';
+        return;
+      }
+      classes = classRows || [];
+      const classIds = classes.map(item => item.id);
+
+      if (classIds.length) {
+        const today = new Date().toISOString().slice(0,10);
+        const [enrollmentResult, learningResult, eventResult] = await Promise.all([
+          supabaseClient.from("class_enrollments").select("class_id,student_id").in("class_id",classIds),
+          supabaseClient.from("learning_items").select("id,class_id,kind,due_date").in("class_id",classIds).order("created_at",{ascending:false}),
+          supabaseClient.from("calendar_events").select("*").in("class_id",classIds).gte("event_date",today).order("event_date").order("start_time")
+        ]);
+        enrollments = enrollmentResult.data || [];
+        learningItems = learningResult.data || [];
+        events = eventResult.data || [];
+        const studentIds = [...new Set(enrollments.map(item => item.student_id))];
+        if (studentIds.length) {
+          const { data } = await supabaseClient.from("students").select("id,full_name").in("id",studentIds);
+          students = data || [];
+        }
+      }
+
+      const today = new Date().toISOString().slice(0,10);
+      classCount.textContent = classes.length;
+      studentCount.textContent = students.length;
+      homeworkCount.textContent = learningItems.filter(item => item.kind === "homework" && (!item.due_date || item.due_date >= today)).length;
+      renderNextLesson();
+      renderClasses();
+    }
+
+    (async () => {
+      authState = await requireRole(["admin","teacher"]);
+      if (!authState) return;
+      teacherName.textContent = (authState.profile.full_name || "underviser").split(" ")[0];
+      loading.remove();
+      app.hidden = false;
+      await loadTeacherDashboard();
+    })();
+  </script>
+</body>
+</html>
