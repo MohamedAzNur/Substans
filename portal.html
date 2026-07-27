@@ -46,6 +46,7 @@
       <a class="brand" href="index.html">Substans</a>
       <nav class="nav">
         <a class="active" href="portal.html">Mit overblik</a>
+        <a href="lesson-room.html">Lektionsrum</a>
         <a href="#learning">Materialer og lektier</a>
         <a href="assignments.html">Mine afleveringer</a>
         <a href="#feedback">Feedback</a>
@@ -221,7 +222,7 @@
     }
 
     function renderCalendar(){
-      calendarList.innerHTML=calendarEvents.length?calendarEvents.map(item=>{const d=new Date(item.event_date+"T12:00:00");const itemClass=classes.find(entry=>entry.id===item.class_id);return `<article class="card calendar-card"><div class="calendar-date"><span>${d.toLocaleDateString("da-DK",{month:"short"})}</span><b>${d.getDate()}</b><span>${d.toLocaleDateString("da-DK",{weekday:"short"})}</span></div><div><span class="eyebrow">${escapeHtml(itemClass?.name||"Hold")}</span><h2 style="font-family:Georgia,serif;font-weight:500;margin:4px 0">${escapeHtml(item.title)}</h2><p class="muted">${item.start_time?`Kl. ${escapeHtml(item.start_time.slice(0,5))}`:"Hele dagen"}</p>${item.details?`<p>${escapeHtml(item.details)}</p>`:""}${item.meeting_url?`<a class="button secondary" href="${escapeHtml(item.meeting_url)}" target="_blank" rel="noopener">Åbn mødelink</a>`:""}</div></article>`}).join(""):'<article class="card empty">Der er ingen kommende aktiviteter.</article>';
+      calendarList.innerHTML=calendarEvents.length?calendarEvents.map(item=>{const d=new Date(item.event_date+"T12:00:00");const itemClass=classes.find(entry=>entry.id===item.class_id);return `<article class="card calendar-card"><div class="calendar-date"><span>${d.toLocaleDateString("da-DK",{month:"short"})}</span><b>${d.getDate()}</b><span>${d.toLocaleDateString("da-DK",{weekday:"short"})}</span></div><div><span class="eyebrow">${escapeHtml(itemClass?.name||"Hold")}</span><h2 style="font-family:Georgia,serif;font-weight:500;margin:4px 0">${escapeHtml(item.title)}</h2><p class="muted">${item.start_time?`Kl. ${escapeHtml(item.start_time.slice(0,5))}`:"Hele dagen"}</p>${item.details?`<p>${escapeHtml(item.details)}</p>`:""}<div class="actions">${item.event_type==="lesson"?`<a class="button" href="lesson-room.html?event=${escapeHtml(item.id)}">Åbn lektionsrum</a>`:""}${item.meeting_url?`<a class="button secondary" href="${escapeHtml(item.meeting_url)}" target="_blank" rel="noopener">Åbn mødelink</a>`:""}</div></div></article>`}).join(""):'<article class="card empty">Der er ingen kommende aktiviteter.</article>';
     }
 
     function renderProgress(){

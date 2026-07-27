@@ -56,6 +56,7 @@ function setupCampusNavigation(role = null) {
         ["students.html", "Elever"],
         ["classes.html", "Hold"],
         ["teachers.html", "Undervisere"],
+        ["lesson-room.html", "Lektionsrum"],
         ["attendance.html", "Fremmøde"],
         ["resources.html", "Materialer"],
         ["assignments.html", "Afleveringer"],
@@ -90,6 +91,7 @@ function setupCampusNavigation(role = null) {
     {
       label: "Undervisning",
       links: [
+        ["lesson-room.html", "Lektionsrum"],
         ["attendance.html", "Fremmøde"],
         ["resources.html", "Materialer og lektier"],
         ["assignments.html", "Afleveringer"],
@@ -121,7 +123,7 @@ function setupCampusNavigation(role = null) {
     {
       label: "Læring",
       links: existingLinks.filter(([href]) =>
-        ["#learning", "#feedback", "#progress", "resources.html", "assignments.html"].includes(href)
+        ["#learning", "#feedback", "#progress", "lesson-room.html", "resources.html", "assignments.html"].includes(href)
       )
     },
     {

@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Lektionsrum · Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .room-layout{display:grid;grid-template-columns:minmax(270px,.65fr) minmax(0,1.55fr);gap:16px}
+    .lesson-rail{align-self:start;position:sticky;top:24px}
+    .lesson-rail h2,.room-section h2{font-family:Georgia,serif;font-weight:500}
+    .lesson-list{display:grid;gap:8px;margin-top:14px}
+    .lesson-choice{display:grid;grid-template-columns:54px minmax(0,1fr);gap:11px;align-items:center;width:100%;text-align:left;border:1px solid var(--line);border-radius:13px;padding:10px;background:#fff;color:var(--ink);cursor:pointer}
+    .lesson-choice:hover,.lesson-choice.active{border-color:#8aa899;background:#f3f7f4}
+    .mini-date{display:grid;place-items:center;min-height:50px;border-radius:11px;background:var(--brand-soft);color:var(--brand);font-weight:850}
+    .mini-date b{font-size:19px;line-height:1}.mini-date small{text-transform:uppercase;font-size:9px}
+    .lesson-choice strong,.lesson-choice small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .lesson-choice small{color:var(--muted)}
+    .room-content{display:grid;gap:16px}
+    .room-hero{position:relative;overflow:hidden;background:linear-gradient(135deg,#17372c,#2a5948);color:#fff;border:0;padding:28px}
+    .room-hero::after{content:"";position:absolute;width:260px;height:260px;right:-110px;top:-140px;border-radius:50%;background:rgba(255,255,255,.07)}
+    .room-hero .eyebrow,.room-hero .muted{color:#b9cec5}
+    .room-hero h1{font-family:Georgia,serif;font-size:clamp(34px,5vw,49px);font-weight:500;line-height:1.05;margin:8px 0}
+    .room-meta{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}
+    .room-meta span{padding:7px 10px;border-radius:999px;background:rgba(255,255,255,.11);font-size:13px;font-weight:750}
+    .room-actions{display:flex;gap:9px;flex-wrap:wrap;position:relative;z-index:1}.room-hero .button{background:#fff;color:#17372c}.room-hero .button.secondary{background:transparent;color:#fff;border-color:rgba(255,255,255,.3)}
+    .room-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+    .room-section{display:grid;gap:10px}.room-section h2{font-size:25px;margin:4px 0}.room-section p{margin:0}
+    .agenda{white-space:pre-line}.status-pill{display:inline-flex;width:max-content;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800}
+    .status-planned{background:#e7f0ff;color:#315b8c}.status-live{background:#fde9e7;color:#91352d}.status-completed{background:#e6f4ea;color:#26653a}
+    .resource-list{display:grid;gap:9px}.resource-row{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px;border:1px solid var(--line);border-radius:12px;background:#f8faf9}
+    .resource-row strong,.resource-row small{display:block}.resource-row small{color:var(--muted)}
+    .editor-card{display:grid;gap:16px}.editor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    .editor-grid label{display:grid;gap:7px;font-size:13px;font-weight:750}.editor-grid label.wide{grid-column:1/-1}
+    .editor-grid input,.editor-grid select,.editor-grid textarea{width:100%;padding:12px;border:1px solid #cbd4cf;border-radius:11px;background:#fff}
+    .empty-room{padding:56px;text-align:center}
+    @media(max-width:1000px){.room-layout{grid-template-columns:1fr}.lesson-rail{position:static}.lesson-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:680px){.room-grid,.editor-grid,.lesson-list{grid-template-columns:1fr}.editor-grid label.wide{grid-column:auto}.room-hero{padding:22px}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Åbner lektionsrummet…</div>
+
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="index.html">Substans</a>
+      <nav class="nav">
+        <a href="portal.html">Mit overblik</a>
+        <a class="active" href="lesson-room.html">Lektionsrum</a>
+        <a href="assignments.html">Afleveringer</a>
+        <a href="resources.html">Materialer og lektier</a>
+        <a href="calendar.html">Kalender</a>
+      </nav>
+      <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <span id="roleLabel" class="eyebrow">Online undervisning</span>
+          <h1 class="title">Lektionsrum</h1>
+          <p class="muted">Mødelink, mål, forberedelse og materialer — samlet omkring den enkelte lektion.</p>
+        </div>
+        <a id="calendarLink" class="button secondary" href="calendar.html" hidden>Planlæg lektion</a>
+      </header>
+
+      <div class="room-layout">
+        <aside class="card lesson-rail">
+          <span class="eyebrow">Undervisningsplan</span>
+          <h2 style="font-size:28px;margin:5px 0">Mine lektioner</h2>
+          <div id="lessonList" class="lesson-list"><p class="muted">Henter lektioner…</p></div>
+        </aside>
+
+        <section class="room-content">
+          <div id="roomView"><article class="card empty-room">Vælg en lektion for at åbne rummet.</article></div>
+
+          <form id="roomEditor" class="card editor-card" hidden>
+            <div>
+              <span class="eyebrow">Underviserens redigering</span>
+              <h2 style="font-family:Georgia,serif;font-size:29px;font-weight:500;margin:5px 0">Gør lektionen klar</h2>
+              <p class="muted">Elever og forældre ser indholdet, så snart du gemmer.</p>
+            </div>
+            <div class="editor-grid">
+              <label>Status
+                <select id="roomStatus">
+                  <option value="planned">Planlagt</option>
+                  <option value="live">Undervisning i gang</option>
+                  <option value="completed">Afsluttet</option>
+                </select>
+              </label>
+              <label>Optagelse eller efterfølgende link
+                <input id="recordingUrl" type="url" placeholder="https://…">
+              </label>
+              <label class="wide">Læringsmål
+                <textarea id="learningGoal" rows="3" maxlength="2000" placeholder="Hvad skal eleverne forstå efter lektionen?"></textarea>
+              </label>
+              <label class="wide">Lektionens plan
+                <textarea id="agenda" rows="5" maxlength="4000" placeholder="1. Velkomst og repetition&#10;2. Dagens emne&#10;3. Refleksion og spørgsmål"></textarea>
+              </label>
+              <label class="wide">Forberedelse
+                <textarea id="preparation" rows="3" maxlength="2000" placeholder="Hvad skal eleven have læst eller have klar?"></textarea>
+              </label>
+              <label class="wide">Opsamling efter lektionen
+                <textarea id="recap" rows="4" maxlength="3000" placeholder="Hvad arbejdede vi med, og hvad er næste skridt?"></textarea>
+              </label>
+            </div>
+            <div class="room-actions"><button id="saveRoomButton" class="button" type="submit">Gem lektionsrum</button><span id="roomMessage" class="muted" role="status"></span></div>
+          </form>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    let authState;
+    let isStaff = false;
+    let classes = [];
+    let events = [];
+    let rooms = [];
+    let learningItems = [];
+    let selectedEventId = null;
+
+    const statusLabels = { planned:"Planlagt", live:"Undervisning i gang", completed:"Afsluttet" };
+
+    function className(id) {
+      return classes.find(item => item.id === id)?.name || "Hold";
+    }
+
+    function formatEventDate(item) {
+      const date = new Date(item.event_date + "T12:00:00");
+      return date.toLocaleDateString("da-DK",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+    }
+
+    function selectDefaultEvent() {
+      const requested = new URLSearchParams(window.location.search).get("event");
+      if (requested && events.some(item => item.id === requested)) return requested;
+      const today = new Date().toISOString().slice(0,10);
+      return events.find(item => item.event_date >= today)?.id || events[0]?.id || null;
+    }
+
+    function renderLessonList() {
+      lessonList.innerHTML = events.length ? events.map(item => {
+        const date = new Date(item.event_date + "T12:00:00");
+        return `<button class="lesson-choice ${item.id === selectedEventId ? "active" : ""}" type="button" data-event="${escapeHtml(item.id)}">
+          <span class="mini-date"><small>${date.toLocaleDateString("da-DK",{month:"short"})}</small><b>${date.getDate()}</b></span>
+          <span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(className(item.class_id))}${item.start_time ? ` · ${escapeHtml(item.start_time.slice(0,5))}` : ""}</small></span>
+        </button>`;
+      }).join("") : '<p class="muted">Der er endnu ikke planlagt undervisning.</p>';
+    }
+
+    async function signedResourceUrl(path) {
+      if (!path) return null;
+      const { data, error } = await supabaseClient.storage.from("learning-attachments").createSignedUrl(path,3600);
+      return error ? null : data.signedUrl;
+    }
+
+    async function renderRoom() {
+      const event = events.find(item => item.id === selectedEventId);
+      if (!event) {
+        roomView.innerHTML = '<article class="card empty-room"><h2>Ingen lektion valgt</h2><p class="muted">Når en lektion er planlagt, bliver dens lektionsrum vist her.</p></article>';
+        roomEditor.hidden = true;
+        return;
+      }
+      const room = rooms.find(item => item.calendar_event_id === event.id);
+      const roomStatusValue = room?.status || "planned";
+      const resources = learningItems.filter(item => item.class_id === event.class_id).slice(0,5);
+      const resourceUrls = await Promise.all(resources.map(item => signedResourceUrl(item.file_path)));
+
+      roomView.innerHTML = `<div class="room-content">
+        <article class="card room-hero">
+          <span class="eyebrow">${escapeHtml(className(event.class_id))} · ${escapeHtml(formatEventDate(event))}</span>
+          <h1>${escapeHtml(event.title)}</h1>
+          <p class="muted">${event.start_time ? `Kl. ${escapeHtml(event.start_time.slice(0,5))}${event.duration_minutes ? ` · ${event.duration_minutes} minutter` : ""}` : "Tidspunkt ikke fastlagt"}</p>
+          <div class="room-meta">
+            <span>${escapeHtml(statusLabels[roomStatusValue])}</span>
+            <span>${escapeHtml(className(event.class_id))}</span>
+          </div>
+          <div class="room-actions">
+            ${event.meeting_url ? `<a class="button" href="${escapeHtml(event.meeting_url)}" target="_blank" rel="noopener">Deltag i undervisningen</a>` : (isStaff ? '<a class="button" href="calendar.html">Tilføj mødelink</a>' : '<span class="muted">Mødelink kommer snart</span>')}
+            ${room?.recording_url ? `<a class="button secondary" href="${escapeHtml(room.recording_url)}" target="_blank" rel="noopener">Se optagelse</a>` : ""}
+          </div>
+        </article>
+
+        <div class="room-grid">
+          <article class="card room-section">
+            <span class="eyebrow">Formål</span>
+            <h2>Læringsmål</h2>
+            <p>${room?.learning_goal ? escapeHtml(room.learning_goal).replace(/\n/g,"<br>") : '<span class="muted">Underviseren tilføjer lektionens mål her.</span>'}</p>
+          </article>
+          <article class="card room-section">
+            <span class="eyebrow">Inden timen</span>
+            <h2>Forberedelse</h2>
+            <p>${room?.preparation ? escapeHtml(room.preparation).replace(/\n/g,"<br>") : (event.details ? escapeHtml(event.details).replace(/\n/g,"<br>") : '<span class="muted">Der er ingen særlig forberedelse.</span>')}</p>
+          </article>
+          <article class="card room-section">
+            <span class="eyebrow">Under timen</span>
+            <h2>Lektionens plan</h2>
+            <p class="agenda">${room?.agenda ? escapeHtml(room.agenda) : '<span class="muted">Planen bliver tilføjet af underviseren.</span>'}</p>
+          </article>
+          <article class="card room-section">
+            <span class="eyebrow">Efter timen</span>
+            <h2>Opsamling</h2>
+            <p>${room?.recap ? escapeHtml(room.recap).replace(/\n/g,"<br>") : '<span class="muted">Opsamlingen bliver synlig efter undervisningen.</span>'}</p>
+          </article>
+        </div>
+
+        <article class="card room-section">
+          <span class="eyebrow">Til lektionen</span>
+          <h2>Materialer og lektier</h2>
+          <div class="resource-list">${resources.length ? resources.map((item,index) => `<div class="resource-row">
+            <span><strong>${escapeHtml(item.title)}</strong><small>${item.kind === "homework" ? "Lektie" : "Materiale"}${item.due_date ? ` · frist ${new Date(item.due_date+"T12:00:00").toLocaleDateString("da-DK")}` : ""}</small></span>
+            <span class="room-actions">
+              ${resourceUrls[index] ? `<a class="button secondary" href="${escapeHtml(resourceUrls[index])}" target="_blank" rel="noopener">Åbn fil</a>` : ""}
+              ${item.resource_url ? `<a class="button secondary" href="${escapeHtml(item.resource_url)}" target="_blank" rel="noopener">Åbn link</a>` : ""}
+              ${item.kind === "homework" ? '<a class="button secondary" href="assignments.html">Aflever</a>' : ""}
+            </span>
+          </div>`).join("") : '<p class="muted">Der er endnu ikke knyttet materialer til holdet.</p>'}</div>
+        </article>
+      </div>`;
+
+      if (isStaff) {
+        roomEditor.hidden = false;
+        roomStatus.value = roomStatusValue;
+        recordingUrl.value = room?.recording_url || "";
+        learningGoal.value = room?.learning_goal || "";
+        agenda.value = room?.agenda || "";
+        preparation.value = room?.preparation || "";
+        recap.value = room?.recap || "";
+        roomMessage.textContent = "";
+      }
+    }
+
+    async function loadData() {
+      const [classResult,eventResult,roomResult,learningResult] = await Promise.all([
+        supabaseClient.from("classes").select("id,name").order("name"),
+        supabaseClient.from("calendar_events").select("*").eq("event_type","lesson").order("event_date").order("start_time"),
+        supabaseClient.from("lesson_rooms").select("*"),
+        supabaseClient.from("learning_items").select("*").order("created_at",{ascending:false})
+      ]);
+      const error = classResult.error || eventResult.error || roomResult.error || learningResult.error;
+      if (error) {
+        roomView.innerHTML = '<article class="card empty-room">Lektionsrummet kunne ikke hentes. Kontrollér modulets databaseopsætning.</article>';
+        return;
+      }
+      classes = classResult.data || [];
+      events = eventResult.data || [];
+      rooms = roomResult.data || [];
+      learningItems = learningResult.data || [];
+      selectedEventId = selectDefaultEvent();
+      renderLessonList();
+      await renderRoom();
+    }
+
+    lessonList.addEventListener("click", async event => {
+      const button = event.target.closest("button[data-event]");
+      if (!button) return;
+      selectedEventId = button.dataset.event;
+      history.replaceState(null,"",`lesson-room.html?event=${encodeURIComponent(selectedEventId)}`);
+      renderLessonList();
+      await renderRoom();
+    });
+
+    roomEditor.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!selectedEventId) return;
+      saveRoomButton.disabled = true;
+      roomMessage.textContent = "Gemmer…";
+      const payload = {
+        calendar_event_id: selectedEventId,
+        learning_goal: learningGoal.value.trim() || null,
+        agenda: agenda.value.trim() || null,
+        preparation: preparation.value.trim() || null,
+        recap: recap.value.trim() || null,
+        recording_url: recordingUrl.value.trim() || null,
+        status: roomStatus.value,
+        updated_by: authState.profile.id,
+        updated_at: new Date().toISOString()
+      };
+      const { data, error } = await supabaseClient.from("lesson_rooms").upsert(payload,{onConflict:"calendar_event_id"}).select().single();
+      saveRoomButton.disabled = false;
+      if (error) {
+        roomMessage.textContent = "Lektionsrummet kunne ikke gemmes.";
+        return;
+      }
+      const index = rooms.findIndex(item => item.calendar_event_id === selectedEventId);
+      if (index >= 0) rooms[index] = data; else rooms.push(data);
+      roomMessage.textContent = "Lektionsrummet er gemt og synligt for holdet.";
+      await renderRoom();
+    });
+
+    (async () => {
+      authState = await requireRole(["student","parent","teacher","admin"]);
+      if (!authState) return;
+      isStaff = ["teacher","admin"].includes(authState.profile.role);
+      if (isStaff) {
+        roleLabel.textContent = authState.profile.role === "teacher" ? "Mit lærerbord" : "Administration";
+        calendarLink.hidden = false;
+      }
+      loading.remove();
+      app.hidden = false;
+      await loadData();
+    })();
+  </script>
+</body>
+</html>

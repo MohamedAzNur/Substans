@@ -17,7 +17,7 @@
     <aside class="sidebar"><a class="brand" href="index.html">Substans</a><nav class="nav">
       <a href="admin.html">Ansøgninger</a><a href="students.html">Elever</a><a href="classes.html">Hold</a><a href="teachers.html">Undervisere</a>
       <a href="attendance.html">Fremmøde</a><a href="resources.html">Materialer</a><a href="feedback.html">Feedback</a><a href="messages.html">Beskeder</a>
-      <a href="payments.html">Betalinger</a><a class="active" href="calendar.html">Kalender</a><a href="accounts.html">Kontoadgang</a>
+      <a href="payments.html">Betalinger</a><a class="active" href="calendar.html">Kalender</a><a href="progress.html">Udvikling</a><a href="accounts.html">Kontoadgang</a>
     </nav><div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div></aside>
     <main class="main">
       <header class="topbar"><div><span class="eyebrow">Planlægning</span><h1 class="title">Kalender og lektioner</h1><p class="muted">Saml undervisning, arrangementer og pauser ét sted.</p></div><span class="badge">Substans Campus</span></header>
@@ -49,7 +49,7 @@
         <div class="date-box"><span>${d.toLocaleDateString("da-DK",{month:"short"})}</span><b>${d.getDate()}</b><span>${d.toLocaleDateString("da-DK",{weekday:"short"})}</span></div>
         <div><span class="eyebrow">${escapeHtml(typeLabel(item.event_type))} · ${escapeHtml(className(item.class_id))}</span><h2>${escapeHtml(item.title)}</h2>
         <p class="muted">${item.start_time?`Kl. ${escapeHtml(item.start_time.slice(0,5))}${item.duration_minutes?` · ${item.duration_minutes} min.`:""}`:"Hele dagen"}</p>${item.details?`<p>${escapeHtml(item.details)}</p>`:""}
-        ${item.meeting_url?`<a class="button secondary" href="${escapeHtml(item.meeting_url)}" target="_blank" rel="noopener">Åbn mødelink</a>`:""}</div>
+        <div class="actions">${item.event_type==="lesson"?`<a class="button" href="lesson-room.html?event=${escapeHtml(item.id)}">Åbn lektionsrum</a>`:""}${item.meeting_url?`<a class="button secondary" href="${escapeHtml(item.meeting_url)}" target="_blank" rel="noopener">Åbn mødelink</a>`:""}</div></div>
         <div class="actions"><button class="button secondary danger" data-delete="${item.id}">Slet</button></div></article>`}).join(""):'<article class="card empty">Der er endnu ikke planlagt aktiviteter.</article>';
     }
     async function load(){const [cr,er]=await Promise.all([supabaseClient.from("classes").select("id,name").order("name"),supabaseClient.from("calendar_events").select("*").order("event_date").order("start_time")]);const error=cr.error||er.error;if(error){formMessage.textContent=error.message;return;}classes=cr.data||[];events=er.data||[];classId.innerHTML='<option value="">Vælg hold</option>'+classes.map(item=>`<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("");render();}
