@@ -41,9 +41,11 @@
         <a href="teachers.html">Undervisere</a>
         <a href="attendance.html">Fremmøde</a>
         <a class="active" href="resources.html">Materialer</a>
+        <a href="assignments.html">Afleveringer</a>
         <a href="feedback.html">Feedback</a>
         <a href="messages.html">Beskeder</a>
         <a href="payments.html">Betalinger</a>
+        <a href="calendar.html">Kalender</a>
         <a href="accounts.html">Kontoadgang</a>
       </nav>
       <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
@@ -56,7 +58,7 @@
           <h1 class="title">Materialer og lektier</h1>
           <p class="muted">Del ressourcer og opgaver med bestemte hold.</p>
         </div>
-        <span id="adminName" class="badge">Bruger</span>
+        <div class="resource-actions"><a class="button secondary" href="assignments.html">Se afleveringer</a><span id="adminName" class="badge">Bruger</span></div>
       </header>
 
       <section class="grid">
@@ -161,6 +163,7 @@
           </div>` : ""}
           <div class="resource-actions">
             ${item.resource_url ? `<a class="button secondary" href="${escapeHtml(item.resource_url)}" target="_blank" rel="noopener">Åbn link</a>` : ""}
+            ${item.kind === "homework" ? `<a class="button secondary" href="assignments.html">Se afleveringer</a>` : ""}
             <button class="delete-button" type="button" data-delete-id="${escapeHtml(item.id)}">Slet</button>
           </div>
         </article>`;

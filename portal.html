@@ -32,6 +32,9 @@
     .payment-list{display:grid;gap:12px}.payment-card{display:grid;gap:10px}
     .payment-card h2{font-family:Georgia,serif;font-weight:500;font-size:24px;margin:3px 0}
     .status-paid{background:#e6f4ea;color:#26653a}.status-overdue{background:#fde9e7;color:#9b3027}.status-pending{background:#fff2df;color:#8a5300}
+    .calendar-list{display:grid;gap:12px}.calendar-card{display:grid;grid-template-columns:68px 1fr;gap:14px;align-items:start}
+    .calendar-date{background:var(--brand-soft);color:var(--brand);border-radius:13px;text-align:center;padding:10px 6px}.calendar-date b{display:block;font-size:25px}.calendar-date span{font-size:11px;font-weight:800;text-transform:uppercase}
+    .progress-list{display:grid;gap:12px}.progress-row{display:grid;gap:9px}.progress-row h2{font-family:Georgia,serif;font-weight:500;font-size:23px;margin:3px 0}.level-bar{height:8px;background:#e8ece9;border-radius:99px;overflow:hidden}.level-bar span{display:block;height:100%;background:var(--brand)}
     @media(max-width:900px){.campus-grid{grid-template-columns:1fr}}
   </style>
 </head>
@@ -44,9 +47,12 @@
       <nav class="nav">
         <a class="active" href="portal.html">Mit overblik</a>
         <a href="#learning">Materialer og lektier</a>
+        <a href="assignments.html">Mine afleveringer</a>
         <a href="#feedback">Feedback</a>
         <a href="#messages">Beskeder</a>
         <a href="#payments">Betalinger</a>
+        <a href="#calendar">Kalender</a>
+        <a href="#progress">Udvikling</a>
         <a id="teacherResources" href="resources.html" hidden>Del materiale</a>
         <a id="adminLink" href="admin.html" hidden>Administration</a>
       </nav>
@@ -84,6 +90,16 @@
         <div id="paymentList" class="payment-list"><article class="card empty">Der er ingen betalinger at vise.</article></div>
       </section>
 
+      <section id="calendar" style="margin-top:28px">
+        <div class="topbar"><div><span class="eyebrow">Plan</span><h2 style="margin:4px 0">Kommende aktiviteter</h2><p class="muted">Undervisning, arrangementer og ferie samlet ét sted.</p></div></div>
+        <div id="calendarList" class="calendar-list"><article class="card empty">Der er ingen kommende aktiviteter.</article></div>
+      </section>
+
+      <section id="progress" style="margin-top:28px">
+        <div class="topbar"><div><span class="eyebrow">Udvikling</span><h2 style="margin:4px 0">Faglige mål</h2><p class="muted">Seneste vurderinger og elevens næste skridt.</p></div></div>
+        <div id="progressList" class="progress-list"><article class="card empty">Der er endnu ikke registreret udvikling.</article></div>
+      </section>
+
       <section id="learning" class="campus-grid" style="margin-top:16px">
         <div>
           <div class="tabs" aria-label="Filtrér læringsindhold">
@@ -117,6 +133,8 @@
     let feedbackRows = [];
     let messages = [];
     let payments = [];
+    let calendarEvents = [];
+    let progressRows = [];
     let activeFilter = "all";
 
     function labelFor(kind) {
@@ -158,7 +176,10 @@
           </div>
           ${item.description ? `<p class="muted">${escapeHtml(item.description)}</p>` : ""}
           ${item.file_path ? `<div class="file-row"><span class="file-name">${escapeHtml(item.file_name || "Vedhæftet fil")}</span>${urls[index] ? `<a class="button secondary" href="${escapeHtml(urls[index])}" target="_blank" rel="noopener">Åbn fil</a>` : `<span class="muted">Filen kan ikke åbnes</span>`}</div>` : ""}
-          ${item.resource_url ? `<div class="actions"><a class="button secondary" href="${escapeHtml(item.resource_url)}" target="_blank" rel="noopener">Åbn link</a></div>` : ""}
+          <div class="actions">
+            ${item.resource_url ? `<a class="button secondary" href="${escapeHtml(item.resource_url)}" target="_blank" rel="noopener">Åbn link</a>` : ""}
+            ${item.kind === "homework" ? `<a class="button" href="assignments.html">Se eller aflever lektie</a>` : ""}
+          </div>
         </article>`;
       }).join("") : '<article class="card empty">Der er endnu ikke delt noget i denne visning.</article>';
     }
@@ -199,19 +220,29 @@
       }).join(""):'<article class="card empty">Der er ingen betalinger at vise.</article>';
     }
 
+    function renderCalendar(){
+      calendarList.innerHTML=calendarEvents.length?calendarEvents.map(item=>{const d=new Date(item.event_date+"T12:00:00");const itemClass=classes.find(entry=>entry.id===item.class_id);return `<article class="card calendar-card"><div class="calendar-date"><span>${d.toLocaleDateString("da-DK",{month:"short"})}</span><b>${d.getDate()}</b><span>${d.toLocaleDateString("da-DK",{weekday:"short"})}</span></div><div><span class="eyebrow">${escapeHtml(itemClass?.name||"Hold")}</span><h2 style="font-family:Georgia,serif;font-weight:500;margin:4px 0">${escapeHtml(item.title)}</h2><p class="muted">${item.start_time?`Kl. ${escapeHtml(item.start_time.slice(0,5))}`:"Hele dagen"}</p>${item.details?`<p>${escapeHtml(item.details)}</p>`:""}${item.meeting_url?`<a class="button secondary" href="${escapeHtml(item.meeting_url)}" target="_blank" rel="noopener">Åbn mødelink</a>`:""}</div></article>`}).join(""):'<article class="card empty">Der er ingen kommende aktiviteter.</article>';
+    }
+
+    function renderProgress(){
+      progressList.innerHTML=progressRows.length?progressRows.map(item=>{const student=students.find(entry=>entry.id===item.student_id);return `<article class="card progress-row"><div style="display:flex;justify-content:space-between;gap:12px"><div><span class="eyebrow">${escapeHtml(student?.full_name||"Elev")} · ${escapeHtml(item.subject)}</span><h2>${escapeHtml(item.skill)}</h2></div><b style="color:var(--brand);font-size:22px">${item.level}/5</b></div><div class="level-bar"><span style="width:${item.level*20}%"></span></div>${item.notes?`<p>${escapeHtml(item.notes)}</p>`:""}${item.next_goal?`<div class="next-step"><b>Næste mål</b><br>${escapeHtml(item.next_goal)}</div>`:""}</article>`}).join(""):'<article class="card empty">Der er endnu ikke registreret udvikling.</article>';
+    }
+
     async function loadCampus(auth) {
       const role = auth.profile.role;
       const email = auth.session.user.email;
       let classIds = [];
 
       if (role === "admin" || role === "teacher") {
-        const [classResult, learningResult, studentResult, feedbackResult, messageResult, paymentResult] = await Promise.all([
+        const [classResult, learningResult, studentResult, feedbackResult, messageResult, paymentResult, calendarResult, progressResult] = await Promise.all([
           supabaseClient.from("classes").select("id,name").order("name"),
           supabaseClient.from("learning_items").select("*").order("created_at", { ascending:false }),
           supabaseClient.from("students").select("id,full_name").order("full_name"),
           supabaseClient.from("student_feedback").select("*").order("created_at",{ascending:false}),
           supabaseClient.from("class_messages").select("*").order("created_at",{ascending:false}),
-          supabaseClient.from("student_payments").select("*").order("created_at",{ascending:false})
+          supabaseClient.from("student_payments").select("*").order("created_at",{ascending:false}),
+          supabaseClient.from("calendar_events").select("*").gte("event_date",new Date().toISOString().slice(0,10)).order("event_date").order("start_time"),
+          supabaseClient.from("student_progress").select("*").order("created_at",{ascending:false})
         ]);
         classes = classResult.data || [];
         learningItems = learningResult.data || [];
@@ -219,6 +250,8 @@
         feedbackRows = feedbackResult.data || [];
         messages = messageResult.data || [];
         payments = paymentResult.data || [];
+        calendarEvents = calendarResult.data || [];
+        progressRows = progressResult.data || [];
       } else {
         const { data: studentRows } = await supabaseClient
           .from("students")
@@ -248,6 +281,12 @@
         if(students.length){
           const {data:paymentRows}=await supabaseClient.from("student_payments").select("*").in("student_id",students.map(student=>student.id)).order("created_at",{ascending:false});
           payments=paymentRows||[];
+          const {data:studentProgressRows}=await supabaseClient.from("student_progress").select("*").in("student_id",students.map(student=>student.id)).order("created_at",{ascending:false});
+          progressRows=studentProgressRows||[];
+        }
+        if(classIds.length){
+          const {data:calendarRows}=await supabaseClient.from("calendar_events").select("*").in("class_id",classIds).gte("event_date",new Date().toISOString().slice(0,10)).order("event_date").order("start_time");
+          calendarEvents=calendarRows||[];
         }
       }
 
@@ -259,6 +298,8 @@
       renderFeedback();
       renderMessages();
       renderPayments();
+      renderCalendar();
+      renderProgress();
     }
 
     document.querySelector(".tabs").addEventListener("click", event => {

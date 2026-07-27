@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Lektier og afleveringer · Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .assignment-toolbar{display:flex;align-items:end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:24px 0 16px}
+    .filter-row{display:flex;gap:8px;flex-wrap:wrap}
+    .filter-row button{border:1px solid var(--line);background:#fff;padding:9px 13px;border-radius:999px;font-weight:750;cursor:pointer}
+    .filter-row button.active{background:var(--brand);border-color:var(--brand);color:#fff}
+    .select-row{display:flex;gap:10px;flex-wrap:wrap}
+    .select-row label{display:grid;gap:5px;color:var(--muted);font-size:12px;font-weight:750}
+    .select-row select{min-width:180px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;background:#fff}
+    .assignment-list{display:grid;gap:14px}
+    .assignment-card{display:grid;gap:16px}
+    .assignment-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+    .assignment-head h2{font-family:Georgia,serif;font-size:27px;font-weight:500;margin:3px 0}
+    .assignment-meta{display:flex;gap:8px;flex-wrap:wrap}
+    .assignment-meta span{padding:6px 9px;border-radius:999px;background:var(--brand-soft);color:var(--brand);font-size:12px;font-weight:750}
+    .student-line{display:flex;align-items:center;gap:10px}
+    .student-avatar{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:var(--brand-soft);color:var(--brand);font-weight:850}
+    .status-pill{display:inline-flex;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800;white-space:nowrap}
+    .status-missing{background:#f0f1ef;color:#5d6661}.status-submitted{background:#e7f0ff;color:#315b8c}.status-in_review{background:#fff2df;color:#8a5300}.status-returned{background:#fde9e7;color:#91352d}.status-approved{background:#e6f4ea;color:#26653a}
+    .submission-box{display:grid;gap:12px;padding:16px;border:1px solid var(--line);border-radius:14px;background:#f8faf9}
+    .submission-form,.review-form{display:grid;gap:12px}
+    .submission-form label,.review-form label{display:grid;gap:6px;font-size:13px;font-weight:750}
+    .submission-form textarea,.review-form textarea,.review-form select{width:100%;padding:12px;border:1px solid #cbd4cf;border-radius:11px;background:#fff}
+    .file-field{padding:13px;border:1px dashed #aabbb2;border-radius:11px;background:#fff}
+    .file-field input{display:block;width:100%;margin-top:7px}
+    .file-hint{font-size:12px;color:var(--muted);font-weight:500;margin:5px 0 0}
+    .submission-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .review-grid{display:grid;grid-template-columns:minmax(180px,.45fr) minmax(0,1fr);gap:12px}
+    .teacher-feedback{padding:14px;border-left:4px solid var(--brand);border-radius:0 12px 12px 0;background:var(--brand-soft)}
+    .deadline-overdue{background:#fde9e7!important;color:#91352d!important}
+    .compact-note{font-size:13px;color:var(--muted)}
+    @media(max-width:760px){.assignment-head{display:grid}.review-grid{grid-template-columns:1fr}.select-row{display:grid;width:100%}.select-row select{width:100%}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Henter lektier og afleveringer…</div>
+
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="index.html">Substans</a>
+      <nav class="nav">
+        <a href="portal.html">Mit overblik</a>
+        <a href="resources.html">Materialer og lektier</a>
+        <a class="active" href="assignments.html">Afleveringer</a>
+        <a href="feedback.html">Feedback</a>
+        <a href="messages.html">Beskeder</a>
+        <a href="calendar.html">Kalender</a>
+      </nav>
+      <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <span id="roleLabel" class="eyebrow">Læring med kontinuitet</span>
+          <h1 id="pageTitle" class="title">Mine afleveringer</h1>
+          <p id="pageIntro" class="muted">Se lektier, aflever dit arbejde og følg underviserens tilbagemelding.</p>
+        </div>
+        <a id="createHomeworkLink" class="button secondary" href="resources.html" hidden>Opret lektie</a>
+      </header>
+
+      <section class="grid">
+        <article class="card stat"><span class="muted">I alt</span><strong id="totalCount">—</strong></article>
+        <article class="card stat"><span id="middleLabel" class="muted">Afleveret</span><strong id="submittedCount">—</strong></article>
+        <article class="card stat"><span id="attentionLabel" class="muted">Kræver handling</span><strong id="attentionCount">—</strong></article>
+      </section>
+
+      <section class="assignment-toolbar">
+        <div class="filter-row" aria-label="Filtrér afleveringer">
+          <button class="active" type="button" data-filter="all">Alle</button>
+          <button type="button" data-filter="open">Åbne</button>
+          <button type="button" data-filter="submitted">Afleveret</button>
+          <button type="button" data-filter="approved">Godkendt</button>
+        </div>
+        <div id="staffFilters" class="select-row" hidden>
+          <label>Hold
+            <select id="classFilter"><option value="all">Alle hold</option></select>
+          </label>
+          <label>Lektie
+            <select id="homeworkFilter"><option value="all">Alle lektier</option></select>
+          </label>
+        </div>
+      </section>
+
+      <section id="assignmentList" class="assignment-list">
+        <article class="card empty">Indlæser afleveringer…</article>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    let authState;
+    let classes = [];
+    let students = [];
+    let enrollments = [];
+    let homework = [];
+    let submissions = [];
+    let tasks = [];
+    let activeFilter = "all";
+    let isStaff = false;
+
+    const statusLabels = {
+      missing: "Ikke afleveret",
+      submitted: "Afleveret",
+      in_review: "Under gennemgang",
+      returned: "Skal rettes",
+      approved: "Godkendt"
+    };
+
+    function formatDate(value) {
+      if (!value) return "";
+      return new Date(value + (value.length === 10 ? "T12:00:00" : "")).toLocaleDateString("da-DK", { day:"numeric", month:"long", year:"numeric" });
+    }
+
+    function isOverdue(item, submission) {
+      return Boolean(item.due_date && item.due_date < new Date().toISOString().slice(0,10) && !["submitted","in_review","approved"].includes(submission?.status));
+    }
+
+    function fileSize(bytes) {
+      if (!bytes) return "";
+      const units = ["B","KB","MB","GB"];
+      const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+      return `${(bytes / Math.pow(1024,index)).toFixed(index ? 1 : 0)} ${units[index]}`;
+    }
+
+    async function signedSubmissionUrl(path) {
+      if (!path) return null;
+      const { data, error } = await supabaseClient.storage.from("homework-submissions").createSignedUrl(path, 3600);
+      return error ? null : data.signedUrl;
+    }
+
+    function buildTasks() {
+      tasks = [];
+      homework.forEach(item => {
+        const enrolledIds = enrollments.filter(row => row.class_id === item.class_id).map(row => row.student_id);
+        students.filter(student => enrolledIds.includes(student.id)).forEach(student => {
+          tasks.push({
+            homework: item,
+            student,
+            itemClass: classes.find(entry => entry.id === item.class_id),
+            submission: submissions.find(entry => entry.learning_item_id === item.id && entry.student_id === student.id) || null
+          });
+        });
+      });
+      tasks.sort((a,b) => {
+        const aDue = a.homework.due_date || "9999-12-31";
+        const bDue = b.homework.due_date || "9999-12-31";
+        return aDue.localeCompare(bDue) || a.student.full_name.localeCompare(b.student.full_name, "da");
+      });
+    }
+
+    function taskMatches(task) {
+      const status = task.submission?.status || "missing";
+      if (classFilter && classFilter.value !== "all" && task.homework.class_id !== classFilter.value) return false;
+      if (homeworkFilter && homeworkFilter.value !== "all" && task.homework.id !== homeworkFilter.value) return false;
+      if (activeFilter === "open") return ["missing","returned"].includes(status);
+      if (activeFilter === "submitted") return ["submitted","in_review"].includes(status);
+      if (activeFilter === "approved") return status === "approved";
+      return true;
+    }
+
+    async function render() {
+      buildTasks();
+      const submitted = tasks.filter(task => task.submission).length;
+      const attention = isStaff
+        ? tasks.filter(task => ["submitted","in_review"].includes(task.submission?.status)).length
+        : tasks.filter(task => ["missing","returned"].includes(task.submission?.status || "missing")).length;
+      totalCount.textContent = tasks.length;
+      submittedCount.textContent = submitted;
+      attentionCount.textContent = attention;
+
+      const visible = tasks.filter(taskMatches);
+      const fileUrls = await Promise.all(visible.map(task => signedSubmissionUrl(task.submission?.file_path)));
+      assignmentList.innerHTML = visible.length ? visible.map((task,index) => isStaff
+        ? staffCard(task,fileUrls[index])
+        : familyCard(task,fileUrls[index])
+      ).join("") : '<article class="card empty">Der er ingen afleveringer i denne visning.</article>';
+    }
+
+    function cardHeader(task) {
+      const status = task.submission?.status || "missing";
+      const overdue = isOverdue(task.homework, task.submission);
+      return `<div class="assignment-head">
+        <div>
+          <span class="eyebrow">${escapeHtml(task.itemClass?.name || "Hold")}</span>
+          <h2>${escapeHtml(task.homework.title)}</h2>
+          <div class="assignment-meta">
+            <span>${escapeHtml(task.student.full_name)}</span>
+            ${task.homework.due_date ? `<span class="${overdue ? "deadline-overdue" : ""}">${overdue ? "Frist overskredet" : "Frist"} ${escapeHtml(formatDate(task.homework.due_date))}</span>` : "<span>Ingen fast frist</span>"}
+          </div>
+        </div>
+        <span class="status-pill status-${status}">${escapeHtml(statusLabels[status])}</span>
+      </div>`;
+    }
+
+    function existingSubmission(task,fileUrl) {
+      const item = task.submission;
+      if (!item) return "";
+      return `<div class="submission-box">
+        <div><span class="eyebrow">Seneste aflevering</span><p class="compact-note">${escapeHtml(formatDate(item.submitted_at))}${item.file_size ? ` · ${escapeHtml(fileSize(item.file_size))}` : ""}</p></div>
+        ${item.response_text ? `<p>${escapeHtml(item.response_text).replace(/\n/g,"<br>")}</p>` : ""}
+        ${item.file_path ? (fileUrl
+          ? `<div class="submission-actions"><a class="button secondary" href="${escapeHtml(fileUrl)}" target="_blank" rel="noopener">Åbn ${escapeHtml(item.file_name || "fil")}</a></div>`
+          : '<p class="muted">Filen kan ikke åbnes lige nu.</p>') : ""}
+        ${item.teacher_feedback ? `<div class="teacher-feedback"><b>Underviserens tilbagemelding</b><br>${escapeHtml(item.teacher_feedback).replace(/\n/g,"<br>")}</div>` : ""}
+      </div>`;
+    }
+
+    function familyCard(task,fileUrl) {
+      const submission = task.submission;
+      const approved = submission?.status === "approved";
+      const inputId = `file-${task.homework.id}-${task.student.id}`;
+      return `<article class="card assignment-card">
+        ${cardHeader(task)}
+        ${task.homework.description ? `<p class="muted">${escapeHtml(task.homework.description)}</p>` : ""}
+        ${existingSubmission(task,fileUrl)}
+        <form class="submission-form" data-homework="${escapeHtml(task.homework.id)}" data-student="${escapeHtml(task.student.id)}">
+          <label>Dit svar
+            <textarea name="response" rows="4" maxlength="4000" placeholder="Skriv dit svar eller en kort besked til underviseren"${approved ? " disabled" : ""}>${escapeHtml(submission?.response_text || "")}</textarea>
+          </label>
+          <label class="file-field" for="${inputId}">Vedhæft din aflevering
+            <input id="${inputId}" name="file" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,image/*,audio/*,video/*"${approved ? " disabled" : ""}>
+            <span class="file-hint">PDF, Word, PowerPoint, billede, lyd eller video. Maks. 50 MB.</span>
+          </label>
+          <div class="submission-actions">
+            <button class="button" type="submit"${approved ? " disabled" : ""}>${approved ? "Afleveringen er godkendt" : (submission ? "Opdatér aflevering" : "Aflever lektie")}</button>
+            <span class="compact-note" role="status"></span>
+          </div>
+        </form>
+      </article>`;
+    }
+
+    function staffCard(task,fileUrl) {
+      const submission = task.submission;
+      return `<article class="card assignment-card">
+        ${cardHeader(task)}
+        ${task.homework.description ? `<p class="muted">${escapeHtml(task.homework.description)}</p>` : ""}
+        ${submission ? existingSubmission(task,fileUrl) : '<div class="submission-box"><b>Afventer elevens aflevering</b><span class="muted">Der er endnu ikke sendt tekst eller fil.</span></div>'}
+        ${submission ? `<form class="review-form" data-submission="${escapeHtml(submission.id)}">
+          <div class="review-grid">
+            <label>Status
+              <select name="status">
+                <option value="submitted"${submission.status === "submitted" ? " selected" : ""}>Afventer gennemgang</option>
+                <option value="in_review"${submission.status === "in_review" ? " selected" : ""}>Under gennemgang</option>
+                <option value="returned"${submission.status === "returned" ? " selected" : ""}>Send tilbage til rettelse</option>
+                <option value="approved"${submission.status === "approved" ? " selected" : ""}>Godkend aflevering</option>
+              </select>
+            </label>
+            <label>Tilbagemelding
+              <textarea name="feedback" rows="3" maxlength="3000" placeholder="Hvad er godt, og hvad er elevens næste skridt?">${escapeHtml(submission.teacher_feedback || "")}</textarea>
+            </label>
+          </div>
+          <div class="submission-actions"><button class="button" type="submit">Gem vurdering</button><span class="compact-note" role="status"></span></div>
+        </form>` : ""}
+      </article>`;
+    }
+
+    function updateHomeworkFilter() {
+      const selectedClass = classFilter.value;
+      const available = homework.filter(item => selectedClass === "all" || item.class_id === selectedClass);
+      const current = homeworkFilter.value;
+      homeworkFilter.innerHTML = '<option value="all">Alle lektier</option>' + available.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title)}</option>`).join("");
+      if (available.some(item => item.id === current)) homeworkFilter.value = current;
+    }
+
+    async function loadData() {
+      const [classResult, studentResult, enrollmentResult, homeworkResult, submissionResult] = await Promise.all([
+        supabaseClient.from("classes").select("id,name").order("name"),
+        supabaseClient.from("students").select("id,full_name").order("full_name"),
+        supabaseClient.from("class_enrollments").select("class_id,student_id"),
+        supabaseClient.from("learning_items").select("*").eq("kind","homework").order("due_date",{ascending:true}),
+        supabaseClient.from("homework_submissions").select("*").order("submitted_at",{ascending:false})
+      ]);
+      const error = classResult.error || studentResult.error || enrollmentResult.error || homeworkResult.error || submissionResult.error;
+      if (error) {
+        assignmentList.innerHTML = '<article class="card empty">Afleveringerne kunne ikke hentes. Kontrollér modulets databaseopsætning.</article>';
+        return;
+      }
+      classes = classResult.data || [];
+      students = studentResult.data || [];
+      enrollments = enrollmentResult.data || [];
+      homework = homeworkResult.data || [];
+      submissions = submissionResult.data || [];
+
+      if (isStaff) {
+        classFilter.innerHTML = '<option value="all">Alle hold</option>' + classes.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
+        updateHomeworkFilter();
+      }
+      await render();
+    }
+
+    document.querySelector(".filter-row").addEventListener("click", event => {
+      const button = event.target.closest("button[data-filter]");
+      if (!button) return;
+      activeFilter = button.dataset.filter;
+      document.querySelectorAll(".filter-row button").forEach(item => item.classList.toggle("active",item === button));
+      render();
+    });
+
+    classFilter.addEventListener("change", () => {
+      updateHomeworkFilter();
+      render();
+    });
+    homeworkFilter.addEventListener("change", render);
+
+    assignmentList.addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.target;
+      const button = form.querySelector('button[type="submit"]');
+      const statusText = form.querySelector('[role="status"]');
+      button.disabled = true;
+
+      if (form.matches(".review-form")) {
+        statusText.textContent = "Gemmer…";
+        const { error } = await supabaseClient.from("homework_submissions").update({
+          status: form.elements.status.value,
+          teacher_feedback: form.elements.feedback.value.trim() || null,
+          reviewed_by: authState.profile.id,
+          reviewed_at: new Date().toISOString()
+        }).eq("id",form.dataset.submission);
+        if (error) {
+          statusText.textContent = "Vurderingen kunne ikke gemmes.";
+          button.disabled = false;
+          return;
+        }
+        statusText.textContent = "Vurderingen er gemt.";
+        await loadData();
+        return;
+      }
+
+      const homeworkId = form.dataset.homework;
+      const studentId = form.dataset.student;
+      const response = form.elements.response.value.trim();
+      const file = form.elements.file.files[0] || null;
+      const existing = submissions.find(item => item.learning_item_id === homeworkId && item.student_id === studentId);
+      if (!response && !file && !existing?.file_path) {
+        statusText.textContent = "Skriv et svar eller vedhæft en fil.";
+        button.disabled = false;
+        return;
+      }
+      if (file && file.size > 50 * 1024 * 1024) {
+        statusText.textContent = "Filen er større end 50 MB.";
+        button.disabled = false;
+        return;
+      }
+
+      statusText.textContent = file ? "Uploader fil…" : "Gemmer…";
+      let newPath = null;
+      if (file) {
+        const safeName = file.name.normalize("NFKD").replace(/[^\w.-]+/g,"-").replace(/-+/g,"-");
+        newPath = `${studentId}/${homeworkId}/${crypto.randomUUID()}-${safeName}`;
+        const { error: uploadError } = await supabaseClient.storage.from("homework-submissions").upload(newPath,file,{
+          contentType:file.type || "application/octet-stream",
+          upsert:false
+        });
+        if (uploadError) {
+          statusText.textContent = "Filen kunne ikke uploades.";
+          button.disabled = false;
+          return;
+        }
+      }
+
+      const payload = {
+        learning_item_id: homeworkId,
+        student_id: studentId,
+        submitted_by: authState.profile.id,
+        response_text: response || null,
+        file_path: newPath || existing?.file_path || null,
+        file_name: file?.name || existing?.file_name || null,
+        file_type: file?.type || existing?.file_type || null,
+        file_size: file?.size || existing?.file_size || null,
+        status: "submitted",
+        teacher_feedback: null,
+        reviewed_by: null,
+        reviewed_at: null,
+        submitted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      const { error } = await supabaseClient.from("homework_submissions").upsert(payload,{onConflict:"learning_item_id,student_id"});
+      if (error) {
+        if (newPath) await supabaseClient.storage.from("homework-submissions").remove([newPath]);
+        statusText.textContent = "Afleveringen kunne ikke gemmes.";
+        button.disabled = false;
+        return;
+      }
+      if (newPath && existing?.file_path) await supabaseClient.storage.from("homework-submissions").remove([existing.file_path]);
+      statusText.textContent = "Afleveringen er sendt.";
+      await loadData();
+    });
+
+    (async () => {
+      authState = await requireRole(["student","parent","teacher","admin"]);
+      if (!authState) return;
+      isStaff = ["teacher","admin"].includes(authState.profile.role);
+      if (isStaff) {
+        roleLabel.textContent = authState.profile.role === "teacher" ? "Underviser" : "Administration";
+        pageTitle.textContent = "Lektier og afleveringer";
+        pageIntro.textContent = "Se hvem der har afleveret, giv feedback og gør næste skridt tydeligt.";
+        middleLabel.textContent = "Modtaget";
+        attentionLabel.textContent = "Til gennemgang";
+        createHomeworkLink.hidden = false;
+        staffFilters.hidden = false;
+      }
+      loading.remove();
+      app.hidden = false;
+      await loadData();
+    })();
+  </script>
+</body>
+</html>
