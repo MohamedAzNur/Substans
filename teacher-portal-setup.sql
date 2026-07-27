@@ -114,11 +114,34 @@ for all to authenticated
 using (public.teacher_can_manage_class(class_id))
 with check (public.teacher_can_manage_class(class_id));
 
+-- Faglig udvikling var designet i V3, men tabellen manglede i den aktive database.
+-- Den oprettes her, så lærerens genvej til faglig udvikling virker med det samme.
+create table if not exists public.student_progress (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid not null references public.students(id) on delete cascade,
+  author_profile_id uuid references public.profiles(id) on delete set null,
+  subject text not null check (subject in ('Qur’an','Sīrah','ʿAqīdah','Fiqh','Tarbiyah')),
+  skill text not null,
+  level integer not null check (level between 1 and 5),
+  notes text,
+  next_goal text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.student_progress enable row level security;
+
 drop policy if exists "Staff manage student progress" on public.student_progress;
 create policy "Staff manage student progress" on public.student_progress
 for all to authenticated
 using (public.teacher_can_access_student(student_id))
 with check (public.teacher_can_access_student(student_id));
+
+drop policy if exists "Families read own progress" on public.student_progress;
+create policy "Families read own progress" on public.student_progress
+for select to authenticated
+using (student_id in (select public.current_student_ids()));
+
+grant select, insert, update, delete on public.student_progress to authenticated;
 
 drop policy if exists "Staff upload learning attachments" on storage.objects;
 create policy "Staff upload learning attachments"
