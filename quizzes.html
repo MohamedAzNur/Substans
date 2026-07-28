@@ -30,6 +30,7 @@
     .option-list{display:grid;gap:9px}.option{display:flex;gap:11px;align-items:flex-start;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}
     .option:has(input:checked){border-color:#6f9783;background:#edf5f0}.option input{margin-top:4px;accent-color:var(--brand)}
     .quiz-submit{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+    .preview-note{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:13px 15px;border:1px solid #bfd3c8;border-radius:13px;background:#eef6f1;color:#234d3d}
     .score-ring{display:grid;place-items:center;width:94px;height:94px;border-radius:50%;background:conic-gradient(var(--brand) var(--score),var(--brand-soft) 0);position:relative}
     .score-ring::after{content:"";position:absolute;inset:9px;border-radius:50%;background:#fff}.score-ring strong{position:relative;z-index:1;font-size:22px}
     .review-item{display:grid;gap:9px;padding:16px;border:1px solid var(--line);border-radius:14px}
@@ -169,15 +170,18 @@
       quizWorkspace.innerHTML = `<article class="card workspace-empty"><h2>${escapeHtml(title)}</h2><p class="muted">${escapeHtml(text)}</p></article>`;
     }
 
-    function renderReview(attempt) {
+    function renderReview(attempt, preview = false) {
       const review = Array.isArray(attempt.answer_review) ? attempt.answer_review : [];
       const percentage = Math.round((attempt.score / attempt.total) * 100);
-      quizWorkspace.innerHTML = `<article class="card">
+      quizWorkspace.innerHTML = `${preview ? `<div class="preview-note">
+        <span><strong>Elevvisning</strong> · Resultatet er kun en forhåndsvisning og bliver ikke gemt.</span>
+        <button id="exitQuizPreview" class="button secondary" type="button">Tilbage til redigering</button>
+      </div>` : ""}<article class="card">
         <div class="result-head">
           <div>
-            <span class="eyebrow">Gennemført</span>
+            <span class="eyebrow">${preview ? "Forhåndsvisning gennemført" : "Gennemført"}</span>
             <h2 style="font-size:34px;margin:6px 0">Dit resultat</h2>
-            <p class="muted">Svarene er gemt. Brug forklaringerne til at forstå næste skridt.</p>
+            <p class="muted">${preview ? "Se, hvilke svar der var rigtige eller forkerte, og læs forklaringerne." : "Svarene er gemt. Brug forklaringerne til at forstå næste skridt."}</p>
           </div>
           <div class="score-ring" style="--score:${percentage}%"><strong>${attempt.score}/${attempt.total}</strong></div>
         </div>
@@ -192,6 +196,74 @@
           ${item.explanation ? `<div class="explanation">${escapeHtml(item.explanation)}</div>` : ""}
         </article>`;
       }).join("")}</section>`;
+      if (preview) {
+        exitQuizPreview.addEventListener("click",() => {
+          const quiz = quizzes.find(item => item.id === selectedQuizId);
+          if (quiz) renderStaffEditor(quiz);
+        });
+      }
+    }
+
+    function renderStaffPreview(quiz) {
+      const quizQuestions = questions
+        .filter(item => item.quiz_id === quiz.id)
+        .sort((a,b) => a.position - b.position);
+      if (!quizQuestions.length) {
+        emptyWorkspace("Quizzen mangler spørgsmål","Gem mindst ét spørgsmål, før du prøver elevvisningen.");
+        return;
+      }
+
+      quizWorkspace.innerHTML = `<div class="preview-note">
+        <span><strong>Elevvisning</strong> · Tag quizzen som en elev. Resultatet bliver ikke gemt.</span>
+        <button id="exitQuizPreview" class="button secondary" type="button">Tilbage til redigering</button>
+      </div>
+      <article class="card quiz-hero">
+        <span class="eyebrow">${escapeHtml(className(quiz.class_id))}</span>
+        <h2>${escapeHtml(quiz.title)}</h2>
+        <p class="muted">${quiz.instructions ? escapeHtml(quiz.instructions) : "Læs hvert spørgsmål roligt, og vælg det svar, du mener er rigtigt."}</p>
+        <div class="quiz-meta"><span>${quizQuestions.length} spørgsmål</span><span>Forhåndsvisning</span></div>
+      </article>
+      <form id="staffPreviewForm" class="question-list">
+        ${quizQuestions.map((question,index) => `<article class="card question-card">
+          <span class="eyebrow">Spørgsmål ${index + 1} af ${quizQuestions.length}</span>
+          <h3>${escapeHtml(question.prompt)}</h3>
+          <div class="option-list">${optionLetters.map(letter => `<label class="option">
+            <input type="radio" name="${escapeHtml(question.id)}" value="${letter}" required>
+            <span>${escapeHtml(question[`option_${letter}`])}</span>
+          </label>`).join("")}</div>
+        </article>`).join("")}
+        <article class="card quiz-submit">
+          <button id="submitStaffPreview" class="button" type="submit">Se mit resultat</button>
+          <span class="muted" role="status">Besvarelsen gemmes ikke.</span>
+        </article>
+      </form>`;
+
+      exitQuizPreview.addEventListener("click",() => renderStaffEditor(quiz));
+      staffPreviewForm.addEventListener("submit",event => {
+        event.preventDefault();
+        const review = quizQuestions.map(question => {
+          const selected = staffPreviewForm.elements[question.id].value;
+          return {
+            position:question.position,
+            prompt:question.prompt,
+            options:{
+              a:question.option_a,
+              b:question.option_b,
+              c:question.option_c,
+              d:question.option_d
+            },
+            selected,
+            correct:question.correct_option,
+            is_correct:selected === question.correct_option,
+            explanation:question.explanation
+          };
+        });
+        renderReview({
+          score:review.filter(item => item.is_correct).length,
+          total:review.length,
+          answer_review:review
+        },true);
+      });
     }
 
     async function renderFamilyQuiz(quiz) {
@@ -344,7 +416,7 @@
           <div id="editorQuestions" class="editor-questions">${quizQuestions.map(questionEditor).join("")}</div>
         </div>
         <div class="editor-footer">
-          <div class="quiz-actions"><button id="saveQuizButton" class="button" type="submit">Gem læringstjek</button><span id="saveQuizMessage" class="muted" role="status"></span></div>
+          <div class="quiz-actions"><button id="saveQuizButton" class="button" type="submit">Gem læringstjek</button>${quiz ? '<button id="previewQuizButton" class="button secondary" type="button">Prøv som elev</button>' : ""}<span id="saveQuizMessage" class="muted" role="status"></span></div>
           ${quiz ? `<span class="muted">${quizAttempts.length} besvarelse${quizAttempts.length === 1 ? "" : "r"}</span>` : ""}
         </div>
       </form>
@@ -370,6 +442,7 @@
         removeButton.closest(".question-editor").remove();
         renumberQuestions();
       });
+      document.getElementById("previewQuizButton")?.addEventListener("click",() => renderStaffPreview(quiz));
       quizEditor.addEventListener("submit",saveQuiz);
     }
 
