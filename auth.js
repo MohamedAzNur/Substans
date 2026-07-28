@@ -53,11 +53,16 @@ function setupCampusNavigation(role = null) {
       ]
     },
     {
-      label: "Undervisning",
+      label: "Personer og hold",
       links: [
         ["students.html", "Elever"],
         ["classes.html", "Hold"],
-        ["teachers.html", "Undervisere"],
+        ["teachers.html", "Undervisere"]
+      ]
+    },
+    {
+      label: "Undervisning",
+      links: [
         ["lesson-room.html", "Lektionsrum"],
         ["curriculum.html", "Undervisningsplan"],
         ["certificates.html", "Certifikater"],
@@ -96,17 +101,22 @@ function setupCampusNavigation(role = null) {
       ]
     },
     {
-      label: "Undervisning",
+      label: "Planlægning",
       links: [
         ["lesson-room.html", "Lektionsrum"],
         ["curriculum.html", "Undervisningsplan"],
+        ["calendar.html", "Kalender"]
+      ]
+    },
+    {
+      label: "Elever og læring",
+      links: [
         ["certificates.html", "Certifikater"],
         ["attendance.html", "Fremmøde"],
         ["resources.html", "Materialer og lektier"],
         ["quizzes.html", "Quizzer og læringstjek"],
         ["assignments.html", "Afleveringer"],
-        ["progress.html", "Faglig udvikling"],
-        ["calendar.html", "Kalender"]
+        ["progress.html", "Faglig udvikling"]
       ]
     },
     {
@@ -114,6 +124,79 @@ function setupCampusNavigation(role = null) {
       links: [
         ["feedback.html", "Feedback"],
         ["messages.html", "Beskeder"]
+      ]
+    },
+    {
+      label: "Konto",
+      links: [
+        ["profile.html", "Min profil"]
+      ]
+    }
+  ];
+
+  const studentMenu = [
+    {
+      label: "Overblik",
+      links: [
+        ["portal.html", "Mit overblik"],
+        ["notifications.html", "Notifikationer"]
+      ]
+    },
+    {
+      label: "Min læring",
+      links: [
+        ["lesson-room.html", "Lektionsrum"],
+        ["curriculum.html", "Undervisningsplan"],
+        ["portal.html#learning", "Materialer og lektier"],
+        ["quizzes.html", "Quizzer"],
+        ["assignments.html", "Mine afleveringer"],
+        ["certificates.html", "Mine certifikater"]
+      ]
+    },
+    {
+      label: "Min udvikling",
+      links: [
+        ["portal.html#feedback", "Feedback"],
+        ["portal.html#progress", "Mine mål"],
+        ["portal.html#messages", "Beskeder"],
+        ["portal.html#calendar", "Kalender"]
+      ]
+    },
+    {
+      label: "Konto",
+      links: [
+        ["profile.html", "Min profil"]
+      ]
+    }
+  ];
+
+  const parentMenu = [
+    {
+      label: "Overblik",
+      links: [
+        ["portal.html", "Mit barn"],
+        ["notifications.html", "Notifikationer"]
+      ]
+    },
+    {
+      label: "Barnets læring",
+      links: [
+        ["lesson-room.html", "Lektionsrum"],
+        ["curriculum.html", "Undervisningsplan"],
+        ["portal.html#learning", "Materialer og lektier"],
+        ["quizzes.html", "Quizzer"],
+        ["assignments.html", "Afleveringer"],
+        ["certificates.html", "Certifikater"]
+      ]
+    },
+    {
+      label: "Opfølgning",
+      links: [
+        ["portal.html#feedback", "Feedback"],
+        ["portal.html#progress", "Udvikling"],
+        ["portal.html#messages", "Beskeder"],
+        ["portal.html#calendar", "Kalender"],
+        ["portal.html#payments", "Betalinger"]
       ]
     },
     {
@@ -154,21 +237,41 @@ function setupCampusNavigation(role = null) {
 
   const menuKey = role || (isTeacherNavigation ? "teacher" : (isAdminNavigation ? "admin" : "portal"));
   if (nav.dataset.menuKey === menuKey) return;
-  const menu = menuKey === "admin" ? adminMenu : (menuKey === "teacher" ? teacherMenu : portalMenu);
+  const roleMenus = {
+    admin: adminMenu,
+    teacher: teacherMenu,
+    student: studentMenu,
+    parent: parentMenu
+  };
+  const menu = roleMenus[menuKey] || portalMenu;
   const currentFile = window.location.pathname.split("/").pop() || "portal.html";
   const currentHash = window.location.hash;
+  const isActiveLink = href => {
+    const target = new URL(href, window.location.href);
+    const targetFile = target.pathname.split("/").pop() || "portal.html";
+    return targetFile === currentFile && target.hash === currentHash;
+  };
+  const activeSectionIndex = menu.findIndex(section =>
+    section.links.some(([href]) => isActiveLink(href))
+  );
 
-  nav.innerHTML = menu.map(section => `
-    <div class="nav-section">
-      <span class="nav-label">${section.label}</span>
-      ${section.links.map(([href, label]) => {
-        const active = href.startsWith("#")
-          ? currentHash === href
-          : href === currentFile;
-        return `<a href="${href}"${active ? ' class="active" aria-current="page"' : ""}>${label}</a>`;
-      }).join("")}
+  nav.innerHTML = menu.map((section,index) => {
+    const open = index === activeSectionIndex || (activeSectionIndex === -1 && index === 0);
+    const sectionId = `nav-section-${menuKey}-${index}`;
+    return `
+    <div class="nav-section${open ? " is-open" : ""}">
+      <button class="nav-section-toggle" type="button" aria-expanded="${open}" aria-controls="${sectionId}" data-nav-section-toggle>
+        <span>${section.label}</span><span class="nav-section-chevron" aria-hidden="true">›</span>
+      </button>
+      <div id="${sectionId}" class="nav-section-links">
+        ${section.links.map(([href, label]) => {
+          const active = isActiveLink(href);
+          return `<a href="${href}"${active ? ' class="active" aria-current="page"' : ""}>${label}</a>`;
+        }).join("")}
+      </div>
     </div>
-  `).join("");
+  `;
+  }).join("");
   nav.dataset.menuKey = menuKey;
 
   nav.id = "campus-navigation";
@@ -195,6 +298,18 @@ function setupCampusNavigation(role = null) {
   });
 
   nav.addEventListener("click", event => {
+    const sectionToggle = event.target.closest("[data-nav-section-toggle]");
+    if (sectionToggle) {
+      const section = sectionToggle.closest(".nav-section");
+      const willOpen = !section.classList.contains("is-open");
+      nav.querySelectorAll(".nav-section").forEach(item => {
+        item.classList.remove("is-open");
+        item.querySelector("[data-nav-section-toggle]")?.setAttribute("aria-expanded","false");
+      });
+      section.classList.toggle("is-open",willOpen);
+      sectionToggle.setAttribute("aria-expanded",String(willOpen));
+      return;
+    }
     if (event.target.closest("a") && window.matchMedia("(max-width: 900px)").matches) {
       closeMenu();
     }
