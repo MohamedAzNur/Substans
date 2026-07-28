@@ -9,6 +9,7 @@
     .class-layout{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,.7fr);gap:16px}
     .class-card{display:grid;gap:16px}
     .class-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+    .class-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
     .class-meta{display:flex;gap:8px;flex-wrap:wrap}
     .class-meta span{padding:6px 9px;border-radius:999px;background:var(--brand-soft);color:var(--brand);font-size:12px;font-weight:750}
     .capacity{height:8px;background:#e8edea;border-radius:999px;overflow:hidden}
@@ -38,6 +39,7 @@
         <a href="feedback.html">Feedback</a>
         <a href="messages.html">Beskeder</a>
         <a href="payments.html">Betalinger</a>
+        <a href="calendar.html">Kalender</a>
         <a href="accounts.html">Kontoadgang</a>
       </nav>
       <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
@@ -64,7 +66,7 @@
 
         <aside class="list">
           <form id="classForm" class="card">
-            <h2 class="section-title">Opret nyt hold</h2>
+            <h2 id="classFormTitle" class="section-title">Opret nyt hold</h2>
             <div class="field"><label for="className">Navn</label><input id="className" required placeholder="F.eks. Hold 1"></div>
             <div class="field"><label for="weekday">Undervisningsdag</label>
               <select id="weekday">
@@ -75,7 +77,10 @@
             <div class="field"><label for="startTime">Starttid</label><input id="startTime" type="time"></div>
             <div class="field"><label for="teacherSelect">Underviser</label><select id="teacherSelect"><option value="">Ikke tilknyttet</option></select></div>
             <div class="field"><label for="capacity">Maks. elever</label><input id="capacity" type="number" min="1" max="100" value="30" required></div>
-            <button id="createClassButton" class="button" type="submit">Opret hold</button>
+            <div class="actions">
+              <button id="createClassButton" class="button" type="submit">Opret hold</button>
+              <button id="cancelClassEdit" class="button secondary" type="button" hidden>Annuller</button>
+            </div>
             <div id="classStatus" class="status" role="status"></div>
           </form>
 
@@ -99,6 +104,7 @@
     let students = [];
     let enrollments = [];
     let teachers = [];
+    let editingClassId = null;
 
     function showStatus(target, message, type) {
       target.textContent = message;
@@ -124,7 +130,10 @@
         return `<article class="card class-card">
           <div class="class-head">
             <div><span class="eyebrow">Hold</span><h2 class="section-title">${escapeHtml(item.name)}</h2></div>
-            <span class="badge">${members.length} / ${item.capacity}</span>
+            <div class="class-actions">
+              <span class="badge">${members.length} / ${item.capacity}</span>
+              <button class="button secondary" type="button" data-edit-class="${escapeHtml(item.id)}">Redigér</button>
+            </div>
           </div>
           <div class="class-meta">
             <span>${escapeHtml(item.weekday || "Dag ikke fastlagt")}</span>
@@ -161,11 +170,43 @@
       render();
     }
 
+    function resetClassForm() {
+      editingClassId = null;
+      classForm.reset();
+      capacity.value = "30";
+      classFormTitle.textContent = "Opret nyt hold";
+      createClassButton.textContent = "Opret hold";
+      cancelClassEdit.hidden = true;
+    }
+
+    function startClassEdit(classId) {
+      const selectedClass = classes.find(item => item.id === classId);
+      if (!selectedClass) return;
+      editingClassId = selectedClass.id;
+      className.value = selectedClass.name || "";
+      weekday.value = selectedClass.weekday || "";
+      startTime.value = selectedClass.start_time ? selectedClass.start_time.slice(0,5) : "";
+      teacherSelect.value = selectedClass.teacher_id || "";
+      capacity.value = selectedClass.capacity || 30;
+      classFormTitle.textContent = "Redigér hold";
+      createClassButton.textContent = "Gem ændringer";
+      cancelClassEdit.hidden = false;
+      classStatus.className = "status";
+      classStatus.textContent = "";
+      classForm.scrollIntoView({ behavior:"smooth", block:"start" });
+    }
+
     classForm.addEventListener("submit", async event => {
       event.preventDefault();
+      const used = editingClassId ? enrollments.filter(item => item.class_id === editingClassId).length : 0;
+      if (editingClassId && Number(capacity.value) < used) {
+        showStatus(classStatus, `Kapaciteten kan ikke være lavere end de ${used} tilknyttede elever.`, "error");
+        return;
+      }
+
       createClassButton.disabled = true;
-      createClassButton.textContent = "Opretter…";
-      const { error } = await supabaseClient.from("classes").insert({
+      createClassButton.textContent = editingClassId ? "Gemmer…" : "Opretter…";
+      const payload = {
         name: className.value.trim(),
         weekday: weekday.value || null,
         start_time: startTime.value || null,
@@ -173,19 +214,25 @@
         teacher_name: teachers.find(item => item.id === teacherSelect.value)?.full_name || null,
         capacity: Number(capacity.value),
         status: "active"
-      });
+      };
+      const query = editingClassId
+        ? supabaseClient.from("classes").update(payload).eq("id", editingClassId)
+        : supabaseClient.from("classes").insert(payload);
+      const { error } = await query;
 
       if (error) {
-        showStatus(classStatus, "Holdet kunne ikke oprettes.", "error");
+        showStatus(classStatus, editingClassId ? "Ændringerne kunne ikke gemmes." : "Holdet kunne ikke oprettes.", "error");
       } else {
-        classForm.reset();
-        capacity.value = "30";
-        showStatus(classStatus, "Holdet er oprettet.", "success");
+        const message = editingClassId ? "Ændringerne er gemt." : "Holdet er oprettet.";
+        resetClassForm();
+        showStatus(classStatus, message, "success");
         await loadData();
       }
       createClassButton.disabled = false;
-      createClassButton.textContent = "Opret hold";
+      createClassButton.textContent = editingClassId ? "Gem ændringer" : "Opret hold";
     });
+
+    cancelClassEdit.addEventListener("click", resetClassForm);
 
     enrollmentForm.addEventListener("submit", async event => {
       event.preventDefault();
@@ -214,10 +261,16 @@
     });
 
     classList.addEventListener("click", async event => {
-      const button = event.target.closest("button[data-enrollment-id]");
-      if (!button) return;
-      button.disabled = true;
-      const { error } = await supabaseClient.from("class_enrollments").delete().eq("id", button.dataset.enrollmentId);
+      const editButton = event.target.closest("button[data-edit-class]");
+      if (editButton) {
+        startClassEdit(editButton.dataset.editClass);
+        return;
+      }
+
+      const removeButton = event.target.closest("button[data-enrollment-id]");
+      if (!removeButton) return;
+      removeButton.disabled = true;
+      const { error } = await supabaseClient.from("class_enrollments").delete().eq("id", removeButton.dataset.enrollmentId);
       if (error) alert("Eleven kunne ikke fjernes fra holdet.");
       await loadData();
     });
