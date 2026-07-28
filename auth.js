@@ -45,36 +45,35 @@ function setupCampusNavigation(role = null) {
 
   const adminMenu = [
     {
-      label: "Overblik",
+      label: "Start",
       links: [
         ["admin.html", "Ansøgninger"],
-        ["notifications.html", "Notifikationer"],
-        ["activity.html", "Aktivitetslog"],
-        ["reports.html", "Rapporter"]
+        ["notifications.html", "Notifikationer"]
       ]
     },
     {
-      label: "Personer og hold",
+      label: "Elever og hold",
       links: [
         ["students.html", "Elever"],
         ["classes.html", "Hold"],
-        ["teachers.html", "Undervisere"]
+        ["teachers.html", "Undervisere"],
+        ["accounts.html", "Kontoadgang"]
       ]
     },
     {
-      label: "Planlæg undervisning",
+      label: "Undervisning",
       links: [
-        ["teaching-flow.html", "Samlet undervisningsflow"],
+        ["teaching-flow.html", "Planlæg undervisning"],
         ["lesson-room.html", "Lektionsrum"],
         ["curriculum.html", "Undervisningsplan"],
         ["attendance.html", "Fremmøde"],
-        ["resources.html", "Materialer og lektier"]
+        ["resources.html", "Materialer og lektier"],
+        ["quizzes.html", "Quizzer"]
       ]
     },
     {
-      label: "Følg læringen",
+      label: "Opfølgning",
       links: [
-        ["quizzes.html", "Quizzer"],
         ["assignments.html", "Afleveringer"],
         ["feedback.html", "Feedback"],
         ["progress.html", "Faglig udvikling"],
@@ -82,17 +81,13 @@ function setupCampusNavigation(role = null) {
       ]
     },
     {
-      label: "Kommunikation",
+      label: "Kontakt og drift",
       links: [
         ["messages.html", "Beskeder"],
-        ["calendar.html", "Kalender"]
-      ]
-    },
-    {
-      label: "Administration",
-      links: [
+        ["calendar.html", "Kalender"],
         ["payments.html", "Betalinger"],
-        ["accounts.html", "Kontoadgang"],
+        ["reports.html", "Rapporter"],
+        ["activity.html", "Aktivitetslog"],
         ["profile.html", "Min profil"]
       ]
     }
@@ -100,24 +95,24 @@ function setupCampusNavigation(role = null) {
 
   const teacherMenu = [
     {
-      label: "Overblik",
+      label: "Start",
       links: [
         ["teacher.html", "Mit lærerbord"],
         ["notifications.html", "Notifikationer"]
       ]
     },
     {
-      label: "Dagens undervisning",
+      label: "Undervis i dag",
       links: [
         ["teaching-flow.html", "Planlæg hele undervisningen"],
         ["lesson-room.html", "Lektionsrum"],
-        ["attendance.html", "Fremmøde"],
-        ["calendar.html", "Kalender"]
+        ["attendance.html", "Fremmøde"]
       ]
     },
     {
-      label: "Indhold",
+      label: "Planlæg og del",
       links: [
+        ["calendar.html", "Kalender"],
         ["curriculum.html", "Undervisningsplan"],
         ["resources.html", "Materialer og lektier"],
         ["quizzes.html", "Quizzer"]
@@ -143,7 +138,7 @@ function setupCampusNavigation(role = null) {
 
   const studentMenu = [
     {
-      label: "Overblik",
+      label: "Start",
       links: [
         ["portal.html", "Min forside"],
         ["notifications.html", "Notifikationer"],
@@ -178,7 +173,7 @@ function setupCampusNavigation(role = null) {
 
   const parentMenu = [
     {
-      label: "Overblik",
+      label: "Start",
       links: [
         ["portal.html", "Mit barn"],
         ["notifications.html", "Notifikationer"]
@@ -187,25 +182,23 @@ function setupCampusNavigation(role = null) {
     {
       label: "Barnets læring",
       links: [
+        ["portal.html#feedback", "Feedback og udvikling"],
         ["curriculum.html", "Undervisningsplan"],
         ["portal.html#learning", "Materialer og lektier"],
-        ["quizzes.html", "Quizresultater"],
-        ["assignments.html", "Afleveringsstatus"],
-        ["certificates.html", "Certifikater"]
+        ["assignments.html", "Afleveringsstatus"]
       ]
     },
     {
-      label: "Opfølgning",
+      label: "Kontakt og kalender",
       links: [
-        ["portal.html#feedback", "Feedback og udvikling"],
         ["portal.html#messages", "Beskeder"],
-        ["portal.html#calendar", "Kalender"],
-        ["portal.html#payments", "Betalinger"]
+        ["portal.html#calendar", "Kalender"]
       ]
     },
     {
-      label: "Konto",
+      label: "Praktisk",
       links: [
+        ["portal.html#payments", "Betalinger"],
         ["profile.html", "Min profil"]
       ]
     }
@@ -258,6 +251,29 @@ function setupCampusNavigation(role = null) {
   const activeSectionIndex = menu.findIndex(section =>
     section.links.some(([href]) => isActiveLink(href))
   );
+  const activeLink = menu
+    .flatMap(section => section.links)
+    .find(([href]) => isActiveLink(href));
+  const roleLabels = {
+    admin: "Administrator",
+    teacher: "Underviser",
+    student: "Elev",
+    parent: "Forælder",
+    portal: "Campus"
+  };
+  const currentLabel = activeLink?.[1] || document.title.split(/[·—]/)[0].trim() || "Campus";
+
+  let navigationContext = sidebar.querySelector(".nav-context");
+  if (!navigationContext) {
+    navigationContext = document.createElement("div");
+    navigationContext.className = "nav-context";
+    brand.insertAdjacentElement("afterend", navigationContext);
+  }
+  navigationContext.innerHTML = `
+    <span class="nav-role">${roleLabels[menuKey] || "Campus"}</span>
+    <strong class="nav-current">${escapeHtml(currentLabel)}</strong>
+  `;
+  nav.setAttribute("aria-label", `Primær navigation for ${roleLabels[menuKey] || "Campus"}`);
 
   nav.innerHTML = menu.map((section,index) => {
     const open = index === activeSectionIndex || (activeSectionIndex === -1 && index === 0);
@@ -282,24 +298,50 @@ function setupCampusNavigation(role = null) {
   if (sidebar.dataset.navigationReady === "true") return;
   sidebar.dataset.navigationReady = "true";
 
+  const main = document.querySelector("main");
+  if (main && !main.id) main.id = "main-content";
+  if (main && !document.querySelector(".skip-link")) {
+    const skipLink = document.createElement("a");
+    skipLink.className = "skip-link";
+    skipLink.href = "#main-content";
+    skipLink.textContent = "Spring til indhold";
+    document.body.prepend(skipLink);
+  }
+
   const menuButton = document.createElement("button");
   menuButton.type = "button";
   menuButton.className = "menu-toggle";
   menuButton.setAttribute("aria-expanded", "false");
   menuButton.setAttribute("aria-controls", "campus-navigation");
   menuButton.innerHTML = '<span class="menu-toggle-icon" aria-hidden="true"><i></i><i></i><i></i></span><span>Menu</span>';
-  brand.insertAdjacentElement("afterend", menuButton);
+  navigationContext.insertAdjacentElement("afterend", menuButton);
   sidebar.classList.add("has-menu-toggle");
+
+  const menuBackdrop = document.createElement("button");
+  menuBackdrop.type = "button";
+  menuBackdrop.className = "menu-backdrop";
+  menuBackdrop.setAttribute("aria-label", "Luk menu");
+  menuBackdrop.hidden = true;
+  sidebar.insertAdjacentElement("afterend", menuBackdrop);
+
+  const setMenuState = open => {
+    nav.classList.toggle("is-open", open);
+    menuButton.classList.toggle("is-open", open);
+    menuButton.setAttribute("aria-expanded", String(open));
+    menuButton.querySelector("span:last-child").textContent = open ? "Luk" : "Menu";
+    menuBackdrop.hidden = !open;
+    document.body.classList.toggle("menu-open", open);
+  };
+
   const closeMenu = () => {
-    nav.classList.remove("is-open");
-    menuButton.setAttribute("aria-expanded", "false");
+    setMenuState(false);
   };
 
   menuButton.addEventListener("click", () => {
     const open = !nav.classList.contains("is-open");
-    nav.classList.toggle("is-open", open);
-    menuButton.setAttribute("aria-expanded", String(open));
+    setMenuState(open);
   });
+  menuBackdrop.addEventListener("click", closeMenu);
 
   nav.addEventListener("click", event => {
     const sectionToggle = event.target.closest("[data-nav-section-toggle]");
@@ -332,10 +374,16 @@ function setupCampusNavigation(role = null) {
       closeMenu();
     }
   });
+
+  window.addEventListener("resize", () => {
+    if (!window.matchMedia("(max-width: 900px)").matches) closeMenu();
+  });
 }
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", setupCampusNavigation);
-} else {
-  setupCampusNavigation();
+if (!window.SUBSTANS_NAV_MANUAL) {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", setupCampusNavigation);
+  } else {
+    setupCampusNavigation();
+  }
 }
