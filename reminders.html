@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Påmindelsesagent · Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .agent-hero{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);gap:18px;margin-bottom:20px}
+    .agent-status{display:flex;align-items:flex-start;gap:14px;background:linear-gradient(145deg,#18382e,#285747);color:#fff}
+    .agent-pulse{width:14px;height:14px;flex:0 0 auto;margin-top:5px;border:4px solid rgba(255,255,255,.25);border-radius:999px;background:#aee1c3;box-shadow:0 0 0 7px rgba(174,225,195,.08)}
+    .agent-status h2{margin:0 0 7px;font-family:Georgia,serif;font-size:28px;font-weight:500}
+    .agent-status p{margin:0;color:#ccddd5}
+    .summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+    .summary-card{padding:18px}
+    .summary-card strong{display:block;margin-top:4px;font-size:30px}
+    .section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:30px 0 14px}
+    .section-head h2{margin:4px 0 0;font-family:Georgia,serif;font-size:30px;font-weight:500}
+    .section-head p{margin:5px 0 0}
+    .class-list{display:grid;gap:14px}
+    .class-reminder{display:grid;grid-template-columns:minmax(190px,.55fr) minmax(0,1.45fr);gap:24px}
+    .class-summary{display:flex;flex-direction:column;align-items:flex-start}
+    .class-summary h3{margin:8px 0 3px;font-family:Georgia,serif;font-size:26px;font-weight:500}
+    .schedule{margin:0 0 15px}
+    .schedule.missing{color:#8a5300}
+    .switch-row{display:flex;align-items:center;gap:10px;margin-top:auto;font-weight:800;cursor:pointer}
+    .switch-row input{width:20px;height:20px;accent-color:var(--brand)}
+    .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+    .settings-grid label{display:grid;gap:7px;font-weight:750}
+    .settings-grid input,.settings-grid select,.settings-grid textarea{width:100%;border:1px solid var(--line);border-radius:12px;padding:11px 12px;background:#fff;color:var(--ink)}
+    .settings-grid .full{grid-column:1/-1}
+    .settings-grid textarea{min-height:92px;resize:vertical}
+    .template-help{margin:0;font-size:12px;color:var(--muted)}
+    .message-preview{grid-column:1/-1;margin-top:2px;padding:15px;border:1px solid #d2e0d8;border-radius:14px;background:#f3f8f5}
+    .message-preview small{display:block;margin-bottom:5px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+    .message-preview strong{display:block;margin-bottom:4px}
+    .message-preview p{margin:0;color:#40544b}
+    .card-actions{grid-column:1/-1;display:flex;align-items:center;justify-content:flex-end;gap:12px}
+    .card-status{margin-right:auto;font-size:13px}
+    .history-list{display:grid;gap:0}
+    .history-row{display:grid;grid-template-columns:minmax(170px,1fr) minmax(180px,.8fr) auto;gap:16px;align-items:center;padding:15px 0;border-bottom:1px solid var(--line)}
+    .history-row:last-child{border-bottom:0}
+    .history-row strong,.history-row span{min-width:0}
+    .info-callout{display:flex;align-items:flex-start;gap:12px;margin-top:16px;padding:15px;border-radius:14px;background:#f7f4e9;color:#5d563c}
+    .info-callout b{flex:0 0 auto}
+    @media(max-width:980px){.agent-hero,.class-reminder{grid-template-columns:1fr}.class-summary{display:grid;grid-template-columns:1fr auto;align-items:start}.class-summary .schedule{grid-column:1}.switch-row{grid-column:2;grid-row:1/3;margin:0}}
+    @media(max-width:680px){.summary-grid,.settings-grid{grid-template-columns:1fr}.settings-grid .full{grid-column:auto}.section-head{align-items:flex-start;flex-direction:column}.class-summary{display:flex}.history-row{grid-template-columns:1fr}.card-actions{align-items:stretch;flex-direction:column}.card-status{margin:0}.card-actions .button{width:100%}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Åbner påmindelsesagenten…</div>
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="index.html">Substans</a>
+      <nav class="nav">
+        <a href="admin.html">Ansøgninger</a>
+        <a href="students.html">Elever</a>
+        <a href="classes.html">Hold</a>
+        <a href="messages.html">Beskeder</a>
+        <a class="active" href="reminders.html">Påmindelsesagent</a>
+        <a href="calendar.html">Kalender</a>
+      </nav>
+      <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <span class="eyebrow">Automatik</span>
+          <h1 class="title">Påmindelsesagent</h1>
+          <p class="muted">Substans minder automatisk det rigtige hold om dagens undervisning.</p>
+        </div>
+        <button id="runAgentButton" class="button secondary" type="button">Kontrollér nu</button>
+      </header>
+
+      <section class="agent-hero">
+        <article class="card agent-status">
+          <span class="agent-pulse" aria-hidden="true"></span>
+          <div>
+            <h2>Agenten er aktiv</h2>
+            <p>Den kontrollerer planen hvert femte minut og sender kun én besked pr. hold og undervisningsdag.</p>
+          </div>
+        </article>
+        <div class="summary-grid" aria-label="Status">
+          <article class="card summary-card"><span class="eyebrow">Aktive hold</span><strong id="activeCount">—</strong></article>
+          <article class="card summary-card"><span class="eyebrow">Mangler tid</span><strong id="missingCount">—</strong></article>
+          <article class="card summary-card"><span class="eyebrow">Sendt i alt</span><strong id="sentCount">—</strong></article>
+        </div>
+      </section>
+
+      <p id="globalStatus" class="status" role="status" aria-live="polite"></p>
+
+      <section>
+        <div class="section-head">
+          <div>
+            <span class="eyebrow">Indstillinger pr. hold</span>
+            <h2>Hvornår skal beskeden sendes?</h2>
+            <p class="muted">Standard er tre timer før undervisningen. Holdets faste tid ændres under <a href="classes.html"><u>Hold</u></a>.</p>
+          </div>
+        </div>
+        <div id="classList" class="class-list">
+          <article class="card empty">Indlæser hold…</article>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-head">
+          <div>
+            <span class="eyebrow">Historik</span>
+            <h2>Senest udsendte påmindelser</h2>
+          </div>
+        </div>
+        <article class="card">
+          <div id="deliveryList" class="history-list"><div class="empty">Indlæser historik…</div></div>
+        </article>
+        <div class="info-callout">
+          <b>Godt at vide</b>
+          <span>En feriepost i kalenderen stopper automatisk dagens påmindelse. En konkret lektion i kalenderen kan tilsidesætte holdets faste tidspunkt.</span>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    const DEFAULT_TITLE = "Husk undervisningen i dag";
+    const DEFAULT_BODY = "Husk at {hold} har undervisning i dag kl. {tid}. Åbn Substans Campus for lektionslink og materialer.";
+    const LEAD_OPTIONS = [
+      [60, "1 time før"],
+      [120, "2 timer før"],
+      [180, "3 timer før"],
+      [360, "6 timer før"],
+      [720, "12 timer før"],
+      [1440, "1 dag før"]
+    ];
+
+    let authState;
+    let classes = [];
+    let settings = [];
+    let deliveries = [];
+    let deliveryCount = 0;
+
+    const byId = id => document.getElementById(id);
+    const className = id => classes.find(item => item.id === id)?.name || "Ukendt hold";
+    const settingFor = id => settings.find(item => item.class_id === id) || {
+      class_id: id,
+      enabled: true,
+      lead_minutes: 180,
+      title_template: DEFAULT_TITLE,
+      body_template: DEFAULT_BODY
+    };
+    const timeLabel = value => value ? value.slice(0, 5).replace(":", ".") : "tidspunkt mangler";
+    const applyTemplate = (template, item) => String(template || "")
+      .replaceAll("{hold}", item.name || "holdet")
+      .replaceAll("{tid}", timeLabel(item.start_time))
+      .replaceAll("{dag}", String(item.weekday || "undervisningsdagen").toLowerCase())
+      .replaceAll("{lektion}", "dagens lektion");
+
+    function showGlobalStatus(message, type = "success") {
+      const status = byId("globalStatus");
+      status.textContent = message;
+      status.className = `status show ${type}`;
+    }
+
+    function renderSummary() {
+      const activeClasses = classes.filter(item => item.status === "active");
+      const enabledClasses = activeClasses.filter(item => settingFor(item.id).enabled);
+      byId("activeCount").textContent = enabledClasses.length;
+      byId("missingCount").textContent = activeClasses.filter(item => !item.weekday || !item.start_time).length;
+      byId("sentCount").textContent = deliveryCount;
+    }
+
+    function renderClassCards() {
+      const list = byId("classList");
+      if (!classes.length) {
+        list.innerHTML = '<article class="card empty">Opret først et hold, før påmindelsesagenten kan bruges.</article>';
+        return;
+      }
+      list.innerHTML = classes.map(item => {
+        const setting = settingFor(item.id);
+        const scheduleReady = Boolean(item.weekday && item.start_time);
+        return `
+          <article class="card class-reminder" data-class-card="${item.id}">
+            <div class="class-summary">
+              <div>
+                <span class="eyebrow">${escapeHtml(item.status === "active" ? "Aktivt hold" : "Ikke aktivt")}</span>
+                <h3>${escapeHtml(item.name)}</h3>
+                <p class="schedule ${scheduleReady ? "" : "missing"}">
+                  ${scheduleReady
+                    ? `${escapeHtml(item.weekday)} kl. ${escapeHtml(timeLabel(item.start_time))}`
+                    : 'Vælg ugedag og tidspunkt under Hold'}
+                </p>
+              </div>
+              <label class="switch-row">
+                <input data-field="enabled" type="checkbox" ${setting.enabled ? "checked" : ""} ${item.status !== "active" ? "disabled" : ""}>
+                <span>${setting.enabled ? "Aktiv" : "Slået fra"}</span>
+              </label>
+            </div>
+            <div class="settings-grid">
+              <label>
+                Send beskeden
+                <select data-field="lead_minutes">
+                  ${LEAD_OPTIONS.map(([minutes, label]) => `<option value="${minutes}" ${Number(setting.lead_minutes) === minutes ? "selected" : ""}>${label}</option>`).join("")}
+                </select>
+              </label>
+              <label>
+                Overskrift
+                <input data-field="title_template" maxlength="140" value="${escapeHtml(setting.title_template)}">
+              </label>
+              <label class="full">
+                Besked
+                <textarea data-field="body_template" maxlength="1000">${escapeHtml(setting.body_template)}</textarea>
+                <span class="template-help">Du kan bruge {hold}, {tid}, {dag} og {lektion}. De udfyldes automatisk.</span>
+              </label>
+              <div class="message-preview" aria-live="polite">
+                <small>Sådan ser beskeden ud</small>
+                <strong data-preview-title></strong>
+                <p data-preview-body></p>
+              </div>
+              <div class="card-actions">
+                <span class="muted card-status" data-card-status role="status"></span>
+                <a class="button secondary" href="classes.html">Ret holdets tid</a>
+                <button class="button" type="button" data-save-settings>Gem indstillinger</button>
+              </div>
+            </div>
+          </article>`;
+      }).join("");
+      list.querySelectorAll("[data-class-card]").forEach(updateCardPreview);
+    }
+
+    function updateCardPreview(card) {
+      const item = classes.find(candidate => candidate.id === card.dataset.classCard);
+      if (!item) return;
+      const title = card.querySelector('[data-field="title_template"]').value;
+      const body = card.querySelector('[data-field="body_template"]').value;
+      card.querySelector("[data-preview-title]").textContent = applyTemplate(title, item);
+      card.querySelector("[data-preview-body]").textContent = applyTemplate(body, item);
+      const toggle = card.querySelector('[data-field="enabled"]');
+      toggle.nextElementSibling.textContent = toggle.checked ? "Aktiv" : "Slået fra";
+    }
+
+    function renderDeliveries() {
+      const list = byId("deliveryList");
+      if (!deliveries.length) {
+        list.innerHTML = '<div class="empty">Agenten har endnu ikke sendt en påmindelse.</div>';
+        return;
+      }
+      list.innerHTML = deliveries.map(item => `
+        <div class="history-row">
+          <strong>${escapeHtml(className(item.class_id))}</strong>
+          <span>${new Date(item.scheduled_start).toLocaleString("da-DK", { dateStyle: "long", timeStyle: "short" })}</span>
+          <span class="badge">Sendt ${new Date(item.sent_at).toLocaleString("da-DK", { dateStyle: "short", timeStyle: "short" })}</span>
+        </div>`).join("");
+    }
+
+    async function loadData() {
+      const [classResult, settingsResult, deliveryResult] = await Promise.all([
+        supabaseClient.from("classes").select("id,name,weekday,start_time,status").order("name"),
+        supabaseClient.from("class_reminder_settings").select("*"),
+        supabaseClient.from("lesson_reminder_deliveries").select("*", { count: "exact" }).order("sent_at", { ascending: false }).limit(20)
+      ]);
+      const error = classResult.error || settingsResult.error || deliveryResult.error;
+      if (error) {
+        showGlobalStatus(`Påmindelsesagenten kunne ikke åbnes: ${error.message}`, "error");
+        return;
+      }
+      classes = classResult.data || [];
+      settings = settingsResult.data || [];
+      deliveries = deliveryResult.data || [];
+      deliveryCount = deliveryResult.count || 0;
+      renderClassCards();
+      renderSummary();
+      renderDeliveries();
+    }
+
+    byId("classList").addEventListener("input", event => {
+      const card = event.target.closest("[data-class-card]");
+      if (card) updateCardPreview(card);
+    });
+
+    byId("classList").addEventListener("click", async event => {
+      const button = event.target.closest("[data-save-settings]");
+      if (!button) return;
+      const card = button.closest("[data-class-card]");
+      const status = card.querySelector("[data-card-status]");
+      const classId = card.dataset.classCard;
+      const payload = {
+        class_id: classId,
+        enabled: card.querySelector('[data-field="enabled"]').checked,
+        lead_minutes: Number(card.querySelector('[data-field="lead_minutes"]').value),
+        title_template: card.querySelector('[data-field="title_template"]').value.trim() || DEFAULT_TITLE,
+        body_template: card.querySelector('[data-field="body_template"]').value.trim() || DEFAULT_BODY,
+        updated_by: authState.profile.id,
+        updated_at: new Date().toISOString()
+      };
+      button.disabled = true;
+      status.textContent = "Gemmer…";
+      const { data, error } = await supabaseClient
+        .from("class_reminder_settings")
+        .upsert(payload, { onConflict: "class_id" })
+        .select()
+        .single();
+      button.disabled = false;
+      if (error) {
+        status.textContent = error.message;
+        return;
+      }
+      settings = settings.filter(item => item.class_id !== classId);
+      settings.push(data);
+      renderSummary();
+      status.textContent = "Gemt";
+      setTimeout(() => { if (status.textContent === "Gemt") status.textContent = ""; }, 2500);
+    });
+
+    byId("runAgentButton").addEventListener("click", async () => {
+      const button = byId("runAgentButton");
+      button.disabled = true;
+      button.textContent = "Kontrollerer…";
+      const { data, error } = await supabaseClient.rpc("run_lesson_reminder_agent");
+      button.disabled = false;
+      button.textContent = "Kontrollér nu";
+      if (error) {
+        showGlobalStatus(error.message, "error");
+        return;
+      }
+      const sent = data?.length || 0;
+      showGlobalStatus(sent
+        ? `${sent} påmindelse${sent === 1 ? "" : "r"} blev sendt.`
+        : "Alt er i orden. Der er ingen påmindelser, som skal sendes lige nu.");
+      await loadData();
+    });
+
+    (async () => {
+      authState = await requireRole(["admin"]);
+      if (!authState) return;
+      byId("loading").remove();
+      byId("app").hidden = false;
+      await loadData();
+    })();
+  </script>
+</body>
+</html>

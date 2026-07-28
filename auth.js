@@ -84,6 +84,7 @@ function setupCampusNavigation(role = null) {
       label: "Kontakt og drift",
       links: [
         ["messages.html", "Beskeder"],
+        ["reminders.html", "Påmindelsesagent"],
         ["calendar.html", "Kalender"],
         ["payments.html", "Betalinger"],
         ["reports.html", "Rapporter"],
