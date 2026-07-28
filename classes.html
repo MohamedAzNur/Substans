@@ -112,7 +112,7 @@
     }
 
     function render() {
-      const activeClasses = classes.filter(item => item.status === "active");
+      const activeClasses = classes.filter(item => item.status !== "archived");
       classCount.textContent = activeClasses.length;
       enrollmentCount.textContent = enrollments.length;
       availableCount.textContent = activeClasses.reduce((sum,item) => {
