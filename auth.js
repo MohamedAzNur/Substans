@@ -61,22 +61,27 @@ function setupCampusNavigation(role = null) {
       ]
     },
     {
-      label: "Undervisning",
+      label: "Planlæg undervisning",
       links: [
         ["lesson-room.html", "Lektionsrum"],
         ["curriculum.html", "Undervisningsplan"],
-        ["certificates.html", "Certifikater"],
         ["attendance.html", "Fremmøde"],
-        ["resources.html", "Materialer"],
-        ["quizzes.html", "Quizzer"],
-        ["assignments.html", "Afleveringer"],
-        ["progress.html", "Udvikling"]
+        ["resources.html", "Materialer og lektier"]
       ]
     },
     {
-      label: "Samarbejde",
+      label: "Følg læringen",
       links: [
+        ["quizzes.html", "Quizzer"],
+        ["assignments.html", "Afleveringer"],
         ["feedback.html", "Feedback"],
+        ["progress.html", "Faglig udvikling"],
+        ["certificates.html", "Certifikater"]
+      ]
+    },
+    {
+      label: "Kommunikation",
+      links: [
         ["messages.html", "Beskeder"],
         ["calendar.html", "Kalender"]
       ]
