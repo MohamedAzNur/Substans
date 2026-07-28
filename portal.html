@@ -324,8 +324,10 @@
       firstName.textContent = name.split(" ")[0];
       const labels = { student:"Elev", parent:"Forælder", teacher:"Underviser", admin:"Administrator · forhåndsvisning" };
       roleLabel.textContent = labels[role] || "Campus";
-      teacherResources.hidden = !["teacher", "admin"].includes(role);
-      adminLink.hidden = role !== "admin";
+      const teacherResourcesLink = document.getElementById("teacherResources");
+      const adminNavigationLink = document.getElementById("adminLink");
+      if (teacherResourcesLink) teacherResourcesLink.hidden = !["teacher", "admin"].includes(role);
+      if (adminNavigationLink) adminNavigationLink.hidden = role !== "admin";
       if (role === "teacher") {
         intro.textContent = "Her ser du materialerne på tværs af dine hold.";
         sideTitle.textContent = "Gør næste skridt tydeligt";
