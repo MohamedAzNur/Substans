@@ -35,6 +35,7 @@
         <a href="feedback.html">Feedback</a>
         <a href="messages.html">Beskeder</a>
         <a href="payments.html">Betalinger</a>
+        <a href="calendar.html">Kalender</a>
         <a href="accounts.html">Kontoadgang</a>
       </nav>
       <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
@@ -61,7 +62,7 @@
 
         <aside class="list">
           <form id="teacherForm" class="card">
-            <h2 class="section-title">Opret underviser</h2>
+            <h2 id="teacherFormTitle" class="section-title">Opret underviser</h2>
             <div class="field"><label for="fullName">Navn</label><input id="fullName" required placeholder="Underviserens fulde navn"></div>
             <div class="field"><label for="email">E-mail</label><input id="email" type="email" required placeholder="navn@eksempel.dk"></div>
             <div class="field"><label for="phone">Telefon</label><input id="phone" type="tel" placeholder="+45 12 34 56 78"></div>
@@ -69,7 +70,10 @@
             <div class="field"><label for="status">Status</label>
               <select id="status"><option value="active">Aktiv</option><option value="invited">Inviteret</option><option value="paused">På pause</option></select>
             </div>
-            <button id="createButton" class="button" type="submit">Opret underviser</button>
+            <div class="actions">
+              <button id="createButton" class="button" type="submit">Opret underviser</button>
+              <button id="cancelTeacherEdit" class="button secondary" type="button" hidden>Annuller</button>
+            </div>
             <div id="formStatus" class="status" role="status"></div>
           </form>
         </aside>
@@ -83,6 +87,7 @@
   <script>
     let teachers = [];
     let classes = [];
+    let editingTeacherId = null;
 
     function showStatus(message, type) {
       formStatus.textContent = message;
@@ -113,6 +118,7 @@
           ${teacher.bio ? `<p class="muted">${escapeHtml(teacher.bio)}</p>` : ""}
           <div><strong>Hold:</strong> <span class="muted">${teacherClasses.length ? teacherClasses.map(item => escapeHtml(item.name)).join(", ") : "Ingen hold endnu"}</span></div>
           <div class="teacher-actions">
+            <button type="button" data-edit-teacher="${escapeHtml(teacher.id)}">Redigér</button>
             <button type="button" data-teacher-id="${escapeHtml(teacher.id)}" data-status="${nextStatus}">${nextStatus === "paused" ? "Sæt på pause" : "Aktivér"}</button>
           </div>
         </article>`;
@@ -134,34 +140,72 @@
       render();
     }
 
+    function resetTeacherForm() {
+      editingTeacherId = null;
+      teacherForm.reset();
+      teacherFormTitle.textContent = "Opret underviser";
+      createButton.textContent = "Opret underviser";
+      cancelTeacherEdit.hidden = true;
+    }
+
+    function startTeacherEdit(teacherId) {
+      const teacher = teachers.find(item => item.id === teacherId);
+      if (!teacher) return;
+      editingTeacherId = teacher.id;
+      fullName.value = teacher.full_name || "";
+      email.value = teacher.email || "";
+      phone.value = teacher.phone || "";
+      bio.value = teacher.bio || "";
+      status.value = teacher.status || "active";
+      teacherFormTitle.textContent = "Redigér underviser";
+      createButton.textContent = "Gem ændringer";
+      cancelTeacherEdit.hidden = false;
+      formStatus.className = "status";
+      formStatus.textContent = "";
+      teacherForm.scrollIntoView({ behavior:"smooth", block:"start" });
+    }
+
     teacherForm.addEventListener("submit", async event => {
       event.preventDefault();
       createButton.disabled = true;
-      createButton.textContent = "Opretter…";
-      const { error } = await supabaseClient.from("teachers").insert({
+      createButton.textContent = editingTeacherId ? "Gemmer…" : "Opretter…";
+      const payload = {
         full_name: fullName.value.trim(),
         email: email.value.trim().toLowerCase(),
         phone: phone.value.trim() || null,
         bio: bio.value.trim() || null,
         status: status.value
-      });
+      };
+      const query = editingTeacherId
+        ? supabaseClient.from("teachers").update(payload).eq("id", editingTeacherId)
+        : supabaseClient.from("teachers").insert(payload);
+      const { error } = await query;
 
       if (error) {
-        showStatus("Underviseren kunne ikke oprettes.", "error");
+        showStatus(editingTeacherId ? "Ændringerne kunne ikke gemmes." : "Underviseren kunne ikke oprettes.", "error");
       } else {
-        teacherForm.reset();
-        showStatus("Underviseren er oprettet.", "success");
+        const message = editingTeacherId ? "Ændringerne er gemt." : "Underviseren er oprettet.";
+        resetTeacherForm();
+        showStatus(message, "success");
         await loadData();
       }
       createButton.disabled = false;
-      createButton.textContent = "Opret underviser";
+      createButton.textContent = editingTeacherId ? "Gem ændringer" : "Opret underviser";
     });
 
+    cancelTeacherEdit.addEventListener("click", resetTeacherForm);
+
     teacherList.addEventListener("click", async event => {
-      const button = event.target.closest("button[data-teacher-id]");
-      if (!button) return;
-      button.disabled = true;
-      const { error } = await supabaseClient.from("teachers").update({ status:button.dataset.status }).eq("id", button.dataset.teacherId);
+      const editButton = event.target.closest("button[data-edit-teacher]");
+      if (editButton) {
+        startTeacherEdit(editButton.dataset.editTeacher);
+        return;
+      }
+
+      const statusButton = event.target.closest("button[data-teacher-id]");
+      if (!statusButton) return;
+      statusButton.disabled = true;
+      const { error } = await supabaseClient.from("teachers").update({ status:statusButton.dataset.status }).eq("id", statusButton.dataset.teacherId);
       if (error) alert("Status kunne ikke ændres.");
       await loadData();
     });
