@@ -348,9 +348,64 @@ drop policy if exists "Admins manage student payments" on public.student_payment
 create policy "Admins manage student payments" on public.student_payments for all to authenticated
 using (public.is_admin()) with check (public.is_admin());
 drop policy if exists "Families read own payments" on public.student_payments;
-create policy "Families read own payments" on public.student_payments for select to authenticated
-using (student_id in (select public.current_student_ids()));
+drop policy if exists "Parents read own payments" on public.student_payments;
+create policy "Parents read own payments" on public.student_payments for select to authenticated
+using (
+  exists (
+    select 1
+    from public.students student
+    where student.id = student_payments.student_id
+      and (
+        student.parent_profile_id = auth.uid()
+        or lower(student.parent_email) = lower(coalesce(auth.jwt()->>'email', ''))
+      )
+  )
+);
 grant select,insert,update,delete on public.student_payments to authenticated;
+
+-- Fælles kalender for lektioner, arrangementer og ferie.
+create table if not exists public.calendar_events (
+  id uuid primary key default gen_random_uuid(),
+  class_id uuid not null references public.classes(id) on delete cascade,
+  author_profile_id uuid references public.profiles(id) on delete set null,
+  event_type text not null default 'lesson' check (event_type in ('lesson','event','holiday')),
+  title text not null,
+  event_date date not null,
+  start_time time,
+  duration_minutes integer check (duration_minutes between 15 and 480),
+  meeting_url text,
+  details text,
+  created_at timestamptz not null default now()
+);
+alter table public.calendar_events enable row level security;
+drop policy if exists "Staff manage calendar events" on public.calendar_events;
+create policy "Staff manage calendar events" on public.calendar_events for all to authenticated
+using (public.is_staff()) with check (public.is_staff());
+drop policy if exists "Members read calendar events" on public.calendar_events;
+create policy "Members read calendar events" on public.calendar_events for select to authenticated
+using (public.can_access_class(class_id));
+grant select,insert,update,delete on public.calendar_events to authenticated;
+
+-- Faglig progression med forståelse og næste mål.
+create table if not exists public.student_progress (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid not null references public.students(id) on delete cascade,
+  author_profile_id uuid references public.profiles(id) on delete set null,
+  subject text not null check (subject in ('Qur’an','Sīrah','ʿAqīdah','Fiqh','Tarbiyah')),
+  skill text not null,
+  level integer not null check (level between 1 and 5),
+  notes text,
+  next_goal text,
+  created_at timestamptz not null default now()
+);
+alter table public.student_progress enable row level security;
+drop policy if exists "Staff manage student progress" on public.student_progress;
+create policy "Staff manage student progress" on public.student_progress for all to authenticated
+using (public.is_staff()) with check (public.is_staff());
+drop policy if exists "Families read own progress" on public.student_progress;
+create policy "Families read own progress" on public.student_progress for select to authenticated
+using (student_id in (select public.current_student_ids()));
+grant select,insert,update,delete on public.student_progress to authenticated;
 
 -- Privat filområde til materialer og lektier. Filer åbnes via tidsbegrænsede links.
 insert into storage.buckets (id, name, public, file_size_limit)

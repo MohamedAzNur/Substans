@@ -138,33 +138,32 @@ function setupCampusNavigation(role = null) {
     {
       label: "Overblik",
       links: [
-        ["portal.html", "Mit overblik"],
-        ["notifications.html", "Notifikationer"]
+        ["portal.html", "Min forside"],
+        ["notifications.html", "Notifikationer"],
+        ["portal.html#calendar", "Kalender"]
       ]
     },
     {
-      label: "Min læring",
+      label: "Undervisning",
       links: [
-        ["lesson-room.html", "Lektionsrum"],
-        ["curriculum.html", "Undervisningsplan"],
+        ["lesson-room.html", "Mine lektioner"],
         ["portal.html#learning", "Materialer og lektier"],
         ["quizzes.html", "Quizzer"],
-        ["assignments.html", "Mine afleveringer"],
-        ["certificates.html", "Mine certifikater"]
+        ["assignments.html", "Mine afleveringer"]
       ]
     },
     {
       label: "Min udvikling",
       links: [
-        ["portal.html#feedback", "Feedback"],
-        ["portal.html#progress", "Mine mål"],
-        ["portal.html#messages", "Beskeder"],
-        ["portal.html#calendar", "Kalender"]
+        ["portal.html#feedback", "Feedback og mål"],
+        ["curriculum.html", "Min undervisningsplan"],
+        ["certificates.html", "Mine certifikater"]
       ]
     },
     {
-      label: "Konto",
+      label: "Praktisk",
       links: [
+        ["portal.html#messages", "Beskeder fra Substans"],
         ["profile.html", "Min profil"]
       ]
     }

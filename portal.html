@@ -142,6 +142,7 @@
     let calendarEvents = [];
     let progressRows = [];
     let activeFilter = "all";
+    let currentRole = null;
 
     function labelFor(kind) {
       return kind === "homework" ? "Lektie" : "Materiale";
@@ -184,7 +185,7 @@
           ${item.file_path ? `<div class="file-row"><span class="file-name">${escapeHtml(item.file_name || "Vedhæftet fil")}</span>${urls[index] ? `<a class="button secondary" href="${escapeHtml(urls[index])}" target="_blank" rel="noopener">Åbn fil</a>` : `<span class="muted">Filen kan ikke åbnes</span>`}</div>` : ""}
           <div class="actions">
             ${item.resource_url ? `<a class="button secondary" href="${escapeHtml(item.resource_url)}" target="_blank" rel="noopener">Åbn link</a>` : ""}
-            ${item.kind === "homework" ? `<a class="button" href="assignments.html">Se eller aflever lektie</a>` : ""}
+            ${item.kind === "homework" ? `<a class="button" href="assignments.html">${currentRole === "parent" ? "Se afleveringsstatus" : "Se eller aflever lektie"}</a>` : ""}
           </div>
         </article>`;
       }).join("") : '<article class="card empty">Der er endnu ikke delt noget i denne visning.</article>';
@@ -227,7 +228,8 @@
     }
 
     function renderCalendar(){
-      calendarList.innerHTML=calendarEvents.length?calendarEvents.map(item=>{const d=new Date(item.event_date+"T12:00:00");const itemClass=classes.find(entry=>entry.id===item.class_id);return `<article class="card calendar-card"><div class="calendar-date"><span>${d.toLocaleDateString("da-DK",{month:"short"})}</span><b>${d.getDate()}</b><span>${d.toLocaleDateString("da-DK",{weekday:"short"})}</span></div><div><span class="eyebrow">${escapeHtml(itemClass?.name||"Hold")}</span><h2 style="font-family:Georgia,serif;font-weight:500;margin:4px 0">${escapeHtml(item.title)}</h2><p class="muted">${item.start_time?`Kl. ${escapeHtml(item.start_time.slice(0,5))}`:"Hele dagen"}</p>${item.details?`<p>${escapeHtml(item.details)}</p>`:""}<div class="actions">${item.event_type==="lesson"?`<a class="button" href="lesson-room.html?event=${escapeHtml(item.id)}">Åbn lektionsrum</a>`:""}${item.meeting_url?`<a class="button secondary" href="${escapeHtml(item.meeting_url)}" target="_blank" rel="noopener">Åbn mødelink</a>`:""}</div></div></article>`}).join(""):'<article class="card empty">Der er ingen kommende aktiviteter.</article>';
+      const canJoinLessons = currentRole === "student" || ["teacher","admin"].includes(currentRole);
+      calendarList.innerHTML=calendarEvents.length?calendarEvents.map(item=>{const d=new Date(item.event_date+"T12:00:00");const itemClass=classes.find(entry=>entry.id===item.class_id);return `<article class="card calendar-card"><div class="calendar-date"><span>${d.toLocaleDateString("da-DK",{month:"short"})}</span><b>${d.getDate()}</b><span>${d.toLocaleDateString("da-DK",{weekday:"short"})}</span></div><div><span class="eyebrow">${escapeHtml(itemClass?.name||"Hold")}</span><h2 style="font-family:Georgia,serif;font-weight:500;margin:4px 0">${escapeHtml(item.title)}</h2><p class="muted">${item.start_time?`Kl. ${escapeHtml(item.start_time.slice(0,5))}`:"Hele dagen"}</p>${item.details?`<p>${escapeHtml(item.details)}</p>`:""}<div class="actions">${item.event_type==="lesson"&&canJoinLessons?`<a class="button" href="lesson-room.html?event=${escapeHtml(item.id)}">Åbn lektionsrum</a>`:""}${item.meeting_url&&canJoinLessons?`<a class="button secondary" href="${escapeHtml(item.meeting_url)}" target="_blank" rel="noopener">Åbn mødelink</a>`:""}</div></div></article>`}).join(""):'<article class="card empty">Der er ingen kommende aktiviteter.</article>';
     }
 
     function renderProgress(){
@@ -236,6 +238,7 @@
 
     async function loadCampus(auth) {
       const role = auth.profile.role;
+      currentRole = role;
       const email = auth.session.user.email;
       let classIds = [];
 
@@ -284,9 +287,11 @@
           feedbackRows = feedbackResult.data || [];
           messages = messageResult.data || [];
         }
-        if(students.length){
+        if(students.length && role === "parent"){
           const {data:paymentRows}=await supabaseClient.from("student_payments").select("*").in("student_id",students.map(student=>student.id)).order("created_at",{ascending:false});
           payments=paymentRows||[];
+        }
+        if(students.length){
           const {data:studentProgressRows}=await supabaseClient.from("student_progress").select("*").in("student_id",students.map(student=>student.id)).order("created_at",{ascending:false});
           progressRows=studentProgressRows||[];
         }
@@ -320,6 +325,7 @@
       const auth = await requireRole(["student", "parent", "teacher", "admin"]);
       if (!auth) return;
       const role = auth.profile.role;
+      currentRole = role;
       const name = auth.profile.full_name || auth.session.user.email.split("@")[0];
       firstName.textContent = name.split(" ")[0];
       const labels = { student:"Elev", parent:"Forælder", teacher:"Underviser", admin:"Administrator · forhåndsvisning" };
@@ -328,6 +334,15 @@
       const adminNavigationLink = document.getElementById("adminLink");
       if (teacherResourcesLink) teacherResourcesLink.hidden = !["teacher", "admin"].includes(role);
       if (adminNavigationLink) adminNavigationLink.hidden = role !== "admin";
+      document.getElementById("payments").hidden = role !== "parent" && role !== "admin";
+      if (role === "student") {
+        intro.textContent = "Se din næste undervisning, dine opgaver og dit næste mål.";
+        document.querySelector("#feedback h2").textContent = "Feedback og mine mål";
+      }
+      if (role === "parent") {
+        intro.textContent = "Følg dit barns læring, trivsel og næste skridt.";
+        document.querySelector("#learning .tabs").setAttribute("aria-label","Filtrér barnets læringsindhold");
+      }
       if (role === "teacher") {
         intro.textContent = "Her ser du materialerne på tværs af dine hold.";
         sideTitle.textContent = "Gør næste skridt tydeligt";
