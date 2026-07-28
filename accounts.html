@@ -173,21 +173,14 @@
 
       button.disabled = true;
       button.textContent = "Gemmer…";
-      const operations = [
-        supabaseClient.from("profiles").update({ role, requested_role:null }).eq("id", profileId),
-        supabaseClient.from("students").update({ student_profile_id:null }).eq("student_profile_id", profileId),
-        supabaseClient.from("students").update({ parent_profile_id:null }).eq("parent_profile_id", profileId),
-        supabaseClient.from("teachers").update({ profile_id:null }).eq("profile_id", profileId)
-      ];
-      const results = await Promise.all(operations);
-      let linkResult = { error:null };
-      if (!results.some(result => result.error)) {
-        if (role === "student") linkResult = await supabaseClient.from("students").update({ student_profile_id:profileId }).eq("id", linkId);
-        if (role === "parent") linkResult = await supabaseClient.from("students").update({ parent_profile_id:profileId }).eq("id", linkId);
-        if (role === "teacher") linkResult = await supabaseClient.from("teachers").update({ profile_id:profileId }).eq("id", linkId);
-      }
-      if (results.some(result => result.error) || linkResult.error) {
-        alert("Kontoadgangen kunne ikke gemmes.");
+      const { error } = await supabaseClient.rpc("assign_profile_access", {
+        target_profile_id: profileId,
+        new_role: role,
+        target_link_id: linkId || null
+      });
+      if (error) {
+        console.error("Kontoadgang kunne ikke gemmes:", error.message);
+        alert(`Kontoadgangen kunne ikke gemmes: ${error.message}`);
       }
       await loadData();
     });
