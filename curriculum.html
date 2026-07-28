@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Undervisningsplan · Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .plan-toolbar{display:flex;align-items:end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:24px 0 16px}
+    .plan-filters{display:flex;gap:10px;flex-wrap:wrap}.plan-filters label{display:grid;gap:5px;color:var(--muted);font-size:12px;font-weight:750}
+    .plan-filters select{min-width:190px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;background:#fff}
+    .plan-shell{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr);gap:16px;align-items:start}
+    .plan-list{display:grid;gap:0}.unit{position:relative;display:grid;grid-template-columns:54px minmax(0,1fr);gap:16px;padding:0 0 24px}
+    .unit:not(:last-child)::before{content:"";position:absolute;left:26px;top:48px;bottom:0;width:2px;background:var(--line)}
+    .unit-marker{position:relative;z-index:1;display:grid;place-items:center;width:52px;height:52px;border-radius:16px;background:var(--brand-soft);color:var(--brand);font-weight:850}
+    .unit.completed .unit-marker{background:var(--brand);color:#fff}.unit.in_progress .unit-marker{background:#e7f0ff;color:#315b8c}
+    .unit-card{display:grid;gap:14px}.unit-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+    .unit-head h2{font-family:Georgia,serif;font-size:28px;font-weight:500;margin:4px 0}.unit-meta{display:flex;gap:8px;flex-wrap:wrap}
+    .unit-meta span{padding:6px 9px;border-radius:999px;background:#f0f3f1;color:var(--muted);font-size:12px;font-weight:750}
+    .status-pill{display:inline-flex;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:850;white-space:nowrap}
+    .status-planned{background:#f0f1ef;color:#5d6661}.status-in_progress{background:#e7f0ff;color:#315b8c}.status-completed{background:#e6f4ea;color:#26653a}
+    .objective{padding:15px;border-left:4px solid var(--brand);border-radius:0 12px 12px 0;background:var(--brand-soft)}
+    .reflection{display:flex;gap:10px;align-items:flex-start;color:var(--muted);font-size:14px}.reflection b{color:var(--brand)}
+    .plan-editor{position:sticky;top:24px;display:grid;gap:16px}.plan-editor h2{font-family:Georgia,serif;font-size:29px;font-weight:500;margin:5px 0}
+    .editor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.editor-grid label{display:grid;gap:6px;font-size:13px;font-weight:750}
+    .editor-grid label.wide{grid-column:1/-1}.editor-grid input,.editor-grid select,.editor-grid textarea{width:100%;padding:12px;border:1px solid #cbd4cf;border-radius:11px;background:#fff}
+    .editor-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.empty-plan{padding:52px;text-align:center}
+    @media(max-width:980px){.plan-shell{grid-template-columns:1fr}.plan-editor{position:static}}
+    @media(max-width:660px){.plan-filters,.editor-grid{display:grid;width:100%;grid-template-columns:1fr}.plan-filters select{width:100%}.editor-grid label.wide{grid-column:auto}.unit-head{display:grid}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Henter undervisningsplanen…</div>
+
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="index.html">Substans</a>
+      <nav class="nav">
+        <a href="portal.html">Mit overblik</a>
+        <a href="lesson-room.html">Lektionsrum</a>
+        <a class="active" href="curriculum.html">Undervisningsplan</a>
+        <a href="quizzes.html">Quizzer</a>
+        <a href="assignments.html">Afleveringer</a>
+      </nav>
+      <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <span id="roleLabel" class="eyebrow">Fra emne til forståelse</span>
+          <h1 class="title">Undervisningsplan</h1>
+          <p id="pageIntro" class="muted">Følg emner, læringsmål og refleksioner gennem hele forløbet.</p>
+        </div>
+        <button id="newUnitButton" class="button" type="button" hidden>Nyt emne</button>
+      </header>
+
+      <section class="grid">
+        <article class="card stat"><span class="muted">Emner</span><strong id="totalCount">—</strong></article>
+        <article class="card stat"><span class="muted">I gang</span><strong id="activeCount">—</strong></article>
+        <article class="card stat"><span class="muted">Gennemført</span><strong id="completedCount">—</strong></article>
+      </section>
+
+      <section class="plan-toolbar">
+        <div class="plan-filters">
+          <label>Hold
+            <select id="classFilter"></select>
+          </label>
+          <label>Fag
+            <select id="subjectFilter">
+              <option value="all">Alle fag</option>
+              <option value="Qur’an">Qur’an</option>
+              <option value="Sīrah">Sīrah</option>
+              <option value="ʿAqīdah">ʿAqīdah</option>
+              <option value="Fiqh">Fiqh</option>
+              <option value="Tarbiyah">Tarbiyah</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <div class="plan-shell">
+        <section id="planList" class="plan-list">
+          <article class="card empty-plan">Henter undervisningsplan…</article>
+        </section>
+
+        <form id="unitEditor" class="card plan-editor" hidden>
+          <div>
+            <span id="editorEyebrow" class="eyebrow">Nyt emne</span>
+            <h2 id="editorTitle">Tilføj til undervisningsplanen</h2>
+            <p class="muted">Gør målet konkret, så både elev og forælder kan følge retningen.</p>
+          </div>
+          <div class="editor-grid">
+            <label>Hold
+              <select id="unitClass" required></select>
+            </label>
+            <label>Fag
+              <select id="unitSubject">
+                <option>Qur’an</option><option>Sīrah</option><option>ʿAqīdah</option><option>Fiqh</option><option>Tarbiyah</option>
+              </select>
+            </label>
+            <label class="wide">Emne
+              <input id="unitTitle" maxlength="180" required placeholder="Fx Hvorfor beder vi?">
+            </label>
+            <label>Status
+              <select id="unitStatus">
+                <option value="planned">Planlagt</option>
+                <option value="in_progress">I gang</option>
+                <option value="completed">Gennemført</option>
+              </select>
+            </label>
+            <label>Placering
+              <input id="unitPosition" type="number" min="1" max="200" value="1" required>
+            </label>
+            <label class="wide">Læringsmål
+              <textarea id="unitObjective" rows="4" maxlength="2400" required placeholder="Efter emnet kan eleven forklare…"></textarea>
+            </label>
+            <label class="wide">Refleksionsspørgsmål
+              <textarea id="unitReflection" rows="3" maxlength="1600" placeholder="Hvad skal eleven tænke videre over?"></textarea>
+            </label>
+            <label>Måldato
+              <input id="unitDate" type="date">
+            </label>
+          </div>
+          <div class="editor-actions">
+            <button id="saveUnitButton" class="button" type="submit">Gem emne</button>
+            <button id="cancelUnitButton" class="button secondary" type="button">Luk</button>
+            <span id="unitMessage" class="muted" role="status"></span>
+          </div>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    let authState;
+    let isStaff = false;
+    let classes = [];
+    let units = [];
+    let editingUnitId = null;
+    const statusLabels = { planned:"Planlagt", in_progress:"I gang", completed:"Gennemført" };
+
+    function formatDate(value) {
+      return value ? new Date(value+"T12:00:00").toLocaleDateString("da-DK",{day:"numeric",month:"long",year:"numeric"}) : "";
+    }
+
+    function visibleUnits() {
+      return units.filter(item =>
+        (!classFilter.value || item.class_id === classFilter.value)
+        && (subjectFilter.value === "all" || item.subject === subjectFilter.value)
+      );
+    }
+
+    function renderPlan() {
+      const visible = visibleUnits();
+      totalCount.textContent = visible.length;
+      activeCount.textContent = visible.filter(item => item.status === "in_progress").length;
+      completedCount.textContent = visible.filter(item => item.status === "completed").length;
+      planList.innerHTML = visible.length ? visible.map((item,index) => `<article class="unit ${item.status}">
+        <div class="unit-marker">${item.status === "completed" ? "✓" : index + 1}</div>
+        <div class="card unit-card">
+          <div class="unit-head">
+            <div>
+              <span class="eyebrow">${escapeHtml(item.subject)}</span>
+              <h2>${escapeHtml(item.title)}</h2>
+              <div class="unit-meta">
+                <span>Del ${escapeHtml(item.position)}</span>
+                ${item.target_date ? `<span>Mål: ${escapeHtml(formatDate(item.target_date))}</span>` : ""}
+              </div>
+            </div>
+            <span class="status-pill status-${item.status}">${escapeHtml(statusLabels[item.status])}</span>
+          </div>
+          <div class="objective"><b>Læringsmål</b><br>${escapeHtml(item.learning_objective).replace(/\n/g,"<br>")}</div>
+          ${item.reflection_prompt ? `<div class="reflection"><b>Reflektér:</b><span>${escapeHtml(item.reflection_prompt)}</span></div>` : ""}
+          ${isStaff ? `<div><button class="button secondary" type="button" data-edit-unit="${escapeHtml(item.id)}">Redigér emne</button></div>` : ""}
+        </div>
+      </article>`).join("") : `<article class="card empty-plan"><h2>Ingen emner endnu</h2><p class="muted">${isStaff ? "Tilføj det første emne til holdets undervisningsplan." : "Underviseren er ved at gøre planen klar."}</p></article>`;
+    }
+
+    function openEditor(item = null) {
+      if (!isStaff) return;
+      editingUnitId = item?.id || null;
+      editorEyebrow.textContent = item ? "Redigér emne" : "Nyt emne";
+      editorTitle.textContent = item ? item.title : "Tilføj til undervisningsplanen";
+      unitClass.value = item?.class_id || classFilter.value || classes[0]?.id || "";
+      unitSubject.value = item?.subject || "Qur’an";
+      unitTitle.value = item?.title || "";
+      unitStatus.value = item?.status || "planned";
+      unitPosition.value = item?.position || Math.max(1,...units.filter(entry => entry.class_id === unitClass.value).map(entry => entry.position + 1));
+      unitObjective.value = item?.learning_objective || "";
+      unitReflection.value = item?.reflection_prompt || "";
+      unitDate.value = item?.target_date || "";
+      unitMessage.textContent = "";
+      unitEditor.hidden = false;
+      unitTitle.focus();
+    }
+
+    async function loadData() {
+      const [classResult,unitResult] = await Promise.all([
+        supabaseClient.from("classes").select("id,name").order("name"),
+        supabaseClient.from("curriculum_units").select("*").order("position").order("created_at")
+      ]);
+      const error = classResult.error || unitResult.error;
+      if (error) {
+        planList.innerHTML = '<article class="card empty-plan">Undervisningsplanen kunne ikke hentes. Kontrollér databaseopsætningen.</article>';
+        return;
+      }
+      classes = classResult.data || [];
+      units = unitResult.data || [];
+      const previousClass = classFilter.value;
+      classFilter.innerHTML = classes.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
+      unitClass.innerHTML = classFilter.innerHTML;
+      if (classes.some(item => item.id === previousClass)) classFilter.value = previousClass;
+      renderPlan();
+    }
+
+    classFilter.addEventListener("change",renderPlan);
+    subjectFilter.addEventListener("change",renderPlan);
+    newUnitButton.addEventListener("click",() => openEditor());
+    cancelUnitButton.addEventListener("click",() => { unitEditor.hidden = true; editingUnitId = null; });
+    planList.addEventListener("click",event => {
+      const button = event.target.closest("[data-edit-unit]");
+      if (button) openEditor(units.find(item => item.id === button.dataset.editUnit));
+    });
+    unitEditor.addEventListener("submit",async event => {
+      event.preventDefault();
+      saveUnitButton.disabled = true;
+      unitMessage.textContent = "Gemmer…";
+      const payload = {
+        class_id:unitClass.value,
+        subject:unitSubject.value,
+        title:unitTitle.value.trim(),
+        learning_objective:unitObjective.value.trim(),
+        reflection_prompt:unitReflection.value.trim() || null,
+        status:unitStatus.value,
+        position:Number(unitPosition.value),
+        target_date:unitDate.value || null,
+        created_by:authState.profile.id,
+        updated_at:new Date().toISOString()
+      };
+      const query = editingUnitId
+        ? supabaseClient.from("curriculum_units").update(payload).eq("id",editingUnitId)
+        : supabaseClient.from("curriculum_units").insert(payload);
+      const { error } = await query;
+      saveUnitButton.disabled = false;
+      if (error) {
+        unitMessage.textContent = "Emnet kunne ikke gemmes.";
+        return;
+      }
+      unitMessage.textContent = "Emnet er gemt.";
+      unitEditor.hidden = true;
+      editingUnitId = null;
+      await loadData();
+    });
+
+    (async () => {
+      authState = await requireRole(["student","parent","teacher","admin"]);
+      if (!authState) return;
+      isStaff = ["teacher","admin"].includes(authState.profile.role);
+      if (isStaff) {
+        roleLabel.textContent = authState.profile.role === "teacher" ? "Mit lærerbord" : "Administration";
+        pageIntro.textContent = "Planlæg emner, læringsmål og refleksioner, og vis tydeligt hvor holdet er på vej hen.";
+        newUnitButton.hidden = false;
+      }
+      loading.remove();
+      app.hidden = false;
+      await loadData();
+    })();
+  </script>
+</body>
+</html>
