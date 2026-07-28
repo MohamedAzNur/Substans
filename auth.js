@@ -248,12 +248,56 @@ function setupCampusNavigation(role = null) {
     const targetFile = target.pathname.split("/").pop() || "portal.html";
     return targetFile === currentFile && target.hash === currentHash;
   };
-  const activeSectionIndex = menu.findIndex(section =>
+  const allLinks = menu.flatMap(section => section.links);
+  const activeLink = allLinks.find(([href]) => isActiveLink(href));
+  const primaryHrefs = {
+    admin: [
+      "admin.html",
+      "students.html",
+      "classes.html",
+      "teaching-flow.html",
+      "messages.html",
+      "payments.html"
+    ],
+    teacher: [
+      "teacher.html",
+      "teaching-flow.html",
+      "attendance.html",
+      "resources.html",
+      "feedback.html",
+      "messages.html"
+    ],
+    student: [
+      "portal.html",
+      "lesson-room.html",
+      "portal.html#learning",
+      "quizzes.html",
+      "portal.html#feedback",
+      "portal.html#messages"
+    ],
+    parent: [
+      "portal.html",
+      "portal.html#feedback",
+      "portal.html#learning",
+      "portal.html#calendar",
+      "portal.html#messages",
+      "portal.html#payments"
+    ]
+  };
+  const preferredPrimary = primaryHrefs[menuKey] || [];
+  const primaryLinks = preferredPrimary.length
+    ? preferredPrimary.map(href => allLinks.find(([candidate]) => candidate === href)).filter(Boolean)
+    : allLinks.slice(0, 6);
+  const primaryHrefSet = new Set(primaryLinks.map(([href]) => href));
+  const moreSections = menu
+    .map(section => ({
+      label: section.label,
+      links: section.links.filter(([href]) => !primaryHrefSet.has(href))
+    }))
+    .filter(section => section.links.length);
+  const moreContainsActiveLink = moreSections.some(section =>
     section.links.some(([href]) => isActiveLink(href))
   );
-  const activeLink = menu
-    .flatMap(section => section.links)
-    .find(([href]) => isActiveLink(href));
   const roleLabels = {
     admin: "Administrator",
     teacher: "Underviser",
@@ -275,23 +319,32 @@ function setupCampusNavigation(role = null) {
   `;
   nav.setAttribute("aria-label", `Primær navigation for ${roleLabels[menuKey] || "Campus"}`);
 
-  nav.innerHTML = menu.map((section,index) => {
-    const open = index === activeSectionIndex || (activeSectionIndex === -1 && index === 0);
-    const sectionId = `nav-section-${menuKey}-${index}`;
-    return `
-    <div class="nav-section${open ? " is-open" : ""}">
-      <button class="nav-section-toggle" type="button" aria-expanded="${open}" aria-controls="${sectionId}" data-nav-section-toggle>
-        <span>${section.label}</span><span class="nav-section-chevron" aria-hidden="true">›</span>
-      </button>
-      <div id="${sectionId}" class="nav-section-links">
-        ${section.links.map(([href, label]) => {
-          const active = isActiveLink(href);
-          return `<a href="${href}"${active ? ' class="active" aria-current="page"' : ""}>${label}</a>`;
-        }).join("")}
-      </div>
+  const renderNavigationLink = ([href, label]) => {
+    const active = isActiveLink(href);
+    return `<a href="${href}"${active ? ' class="active" aria-current="page"' : ""}>${label}</a>`;
+  };
+
+  nav.innerHTML = `
+    <div class="nav-primary" aria-label="Vigtigste funktioner">
+      ${primaryLinks.map(renderNavigationLink).join("")}
     </div>
+    ${moreSections.length ? `
+      <details class="nav-more"${moreContainsActiveLink ? " open" : ""}>
+        <summary>
+          <span>Flere funktioner</span>
+          <span class="nav-more-chevron" aria-hidden="true">›</span>
+        </summary>
+        <div class="nav-more-content">
+          ${moreSections.map(section => `
+            <div class="nav-more-group">
+              <span class="nav-more-label">${section.label}</span>
+              ${section.links.map(renderNavigationLink).join("")}
+            </div>
+          `).join("")}
+        </div>
+      </details>
+    ` : ""}
   `;
-  }).join("");
   nav.dataset.menuKey = menuKey;
 
   nav.id = "campus-navigation";
@@ -344,18 +397,6 @@ function setupCampusNavigation(role = null) {
   menuBackdrop.addEventListener("click", closeMenu);
 
   nav.addEventListener("click", event => {
-    const sectionToggle = event.target.closest("[data-nav-section-toggle]");
-    if (sectionToggle) {
-      const section = sectionToggle.closest(".nav-section");
-      const willOpen = !section.classList.contains("is-open");
-      nav.querySelectorAll(".nav-section").forEach(item => {
-        item.classList.remove("is-open");
-        item.querySelector("[data-nav-section-toggle]")?.setAttribute("aria-expanded","false");
-      });
-      section.classList.toggle("is-open",willOpen);
-      sectionToggle.setAttribute("aria-expanded",String(willOpen));
-      return;
-    }
     if (event.target.closest("a") && window.matchMedia("(max-width: 900px)").matches) {
       closeMenu();
     }
