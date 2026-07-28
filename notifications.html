@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Notifikationer · Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .notification-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}
+    .filter-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+    .filter-row button{border:1px solid var(--line);background:#fff;color:var(--ink);padding:9px 13px;border-radius:999px;font-weight:750;cursor:pointer}
+    .filter-row button.active{background:var(--brand);border-color:var(--brand);color:#fff}
+    .notification-list{display:grid;gap:10px}
+    .notification-card{position:relative;display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:14px;align-items:start;padding:18px 18px 18px 20px}
+    .notification-card.unread{border-color:#9fb9ad;box-shadow:0 8px 28px rgba(35,79,63,.08)}
+    .notification-card.unread::before{content:"";position:absolute;left:-1px;top:18px;bottom:18px;width:4px;border-radius:0 99px 99px 0;background:var(--brand)}
+    .notification-icon{width:44px;height:44px;display:grid;place-items:center;border-radius:14px;background:var(--brand-soft);color:var(--brand);font-size:18px;font-weight:900}
+    .notification-icon.urgent{background:#fde9e7;color:#9b3027}
+    .notification-icon.important{background:#fff2df;color:#8a5300}
+    .notification-copy{min-width:0}.notification-copy h2{margin:1px 0 4px;font-size:17px}.notification-copy p{margin:0;color:var(--muted);font-size:14px}
+    .notification-meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--muted)}
+    .notification-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+    .small-button{border:1px solid var(--line);background:#fff;color:var(--ink);padding:8px 11px;border-radius:999px;font-size:12px;font-weight:800;cursor:pointer}
+    .small-button.primary{border-color:var(--brand);background:var(--brand);color:#fff}
+    .summary{position:sticky;top:24px;display:grid;gap:12px}
+    .summary .card{box-shadow:none}.summary h2{font-family:Georgia,serif;font-size:25px;font-weight:500;margin:4px 0 8px}
+    .summary-row{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px solid var(--line)}
+    .summary-row:last-child{border-bottom:0}.summary-row strong{font-size:20px}
+    .quiet-note{padding:15px;border-radius:13px;background:#f4f7f5;color:var(--muted);font-size:13px}
+    @media(max-width:1000px){.notification-layout{grid-template-columns:1fr}.summary{position:static;grid-row:1}}
+    @media(max-width:680px){.notification-card{grid-template-columns:40px minmax(0,1fr)}.notification-actions{grid-column:2;justify-content:flex-start}.topbar .button{width:100%}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Samler dine notifikationer…</div>
+
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="index.html">Substans</a>
+      <nav class="nav">
+        <a href="portal.html">Mit overblik</a>
+        <a class="active" href="notifications.html">Notifikationer</a>
+      </nav>
+      <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <span class="eyebrow">Samlet overblik</span>
+          <h1 class="title">Notifikationer</h1>
+          <p class="muted">Nye beskeder, feedback, frister og kommende aktiviteter – samlet ét sted.</p>
+        </div>
+        <button id="markAllButton" class="button secondary" type="button">Markér alle som læst</button>
+      </header>
+
+      <section class="notification-layout">
+        <div>
+          <div class="filter-row" aria-label="Filtrér notifikationer">
+            <button class="active" type="button" data-filter="all">Alle</button>
+            <button type="button" data-filter="unread">Ulæste</button>
+            <button type="button" data-filter="important">Vigtige</button>
+            <button type="button" data-filter="deadline">Frister</button>
+          </div>
+          <div id="notificationList" class="notification-list">
+            <article class="card empty">Henter dit overblik…</article>
+          </div>
+        </div>
+
+        <aside class="summary">
+          <article class="card">
+            <span class="eyebrow">Lige nu</span>
+            <h2>Dit næste skridt</h2>
+            <div class="summary-row"><span>Ulæste</span><strong id="unreadCount">0</strong></div>
+            <div class="summary-row"><span>Vigtige</span><strong id="importantCount">0</strong></div>
+            <div class="summary-row"><span>Frister inden 7 dage</span><strong id="deadlineCount">0</strong></div>
+          </article>
+          <div class="quiet-note">Du ser kun oplysninger, som din rolle og dine hold giver adgang til.</div>
+        </aside>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    let authState;
+    let notifications = [];
+    let readKeys = new Set();
+    let activeFilter = "all";
+    let classNames = new Map();
+
+    const sourceLabels = {
+      message: "Besked",
+      feedback: "Feedback",
+      homework: "Lektie",
+      quiz: "Quiz",
+      event: "Kalender",
+      payment: "Betaling"
+    };
+
+    function dateValue(value) {
+      if (!value) return null;
+      const result = new Date(value);
+      return Number.isNaN(result.getTime()) ? null : result;
+    }
+
+    function dayLabel(value) {
+      const date = dateValue(value);
+      if (!date) return "";
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const target = new Date(date);
+      target.setHours(0,0,0,0);
+      const difference = Math.round((target - today) / 86400000);
+      if (difference === 0) return "I dag";
+      if (difference === 1) return "I morgen";
+      if (difference === -1) return "I går";
+      return date.toLocaleDateString("da-DK",{day:"numeric",month:"short"});
+    }
+
+    function isWithinSevenDays(value) {
+      const date = dateValue(value);
+      if (!date) return false;
+      const difference = date - new Date();
+      return difference >= 0 && difference <= 7 * 86400000;
+    }
+
+    function notificationKey(item) {
+      return `${item.type}:${item.id}`;
+    }
+
+    function isUnread(item) {
+      return !readKeys.has(notificationKey(item));
+    }
+
+    function iconFor(item) {
+      if (item.type === "message") return "M";
+      if (item.type === "feedback") return "F";
+      if (item.type === "homework") return "L";
+      if (item.type === "quiz") return "Q";
+      if (item.type === "event") return "K";
+      return "B";
+    }
+
+    function render() {
+      const visible = notifications.filter(item => {
+        if (activeFilter === "unread") return isUnread(item);
+        if (activeFilter === "important") return item.important;
+        if (activeFilter === "deadline") return item.deadline;
+        return true;
+      });
+
+      unreadCount.textContent = notifications.filter(isUnread).length;
+      importantCount.textContent = notifications.filter(item => item.important).length;
+      deadlineCount.textContent = notifications.filter(item => item.deadline && isWithinSevenDays(item.date)).length;
+      markAllButton.disabled = !notifications.some(isUnread);
+
+      notificationList.innerHTML = visible.length ? visible.map(item => {
+        const unread = isUnread(item);
+        const iconClass = item.urgent ? "urgent" : (item.important ? "important" : "");
+        const className = item.classId ? classNames.get(item.classId) : null;
+        return `
+          <article class="card notification-card ${unread ? "unread" : ""}">
+            <div class="notification-icon ${iconClass}" aria-hidden="true">${iconFor(item)}</div>
+            <div class="notification-copy">
+              <h2>${escapeHtml(item.title)}</h2>
+              <p>${escapeHtml(item.description || "")}</p>
+              <div class="notification-meta">
+                <span class="badge">${escapeHtml(sourceLabels[item.type] || "Nyt")}</span>
+                ${className ? `<span>${escapeHtml(className)}</span>` : ""}
+                ${item.date ? `<span>${escapeHtml(dayLabel(item.date))}</span>` : ""}
+                ${unread ? "<strong>Ny</strong>" : "<span>Læst</span>"}
+              </div>
+            </div>
+            <div class="notification-actions">
+              ${unread ? `<button class="small-button" type="button" data-read="${escapeHtml(item.type)}:${escapeHtml(item.id)}">Markér læst</button>` : ""}
+              <a class="small-button primary" href="${escapeHtml(item.href)}" data-open="${escapeHtml(item.type)}:${escapeHtml(item.id)}">Åbn</a>
+            </div>
+          </article>`;
+      }).join("") : `<article class="card empty">${activeFilter === "unread" ? "Du har læst det hele." : "Der er ingen notifikationer i denne kategori."}</article>`;
+    }
+
+    async function markRead(type, id) {
+      const key = `${type}:${id}`;
+      if (readKeys.has(key)) return true;
+      const { error } = await supabaseClient.from("notification_reads").upsert({
+        profile_id: authState.profile.id,
+        source_type: type,
+        source_id: id,
+        read_at: new Date().toISOString()
+      },{onConflict:"profile_id,source_type,source_id"});
+      if (error) {
+        alert("Notifikationen kunne ikke markeres som læst.");
+        return false;
+      }
+      readKeys.add(key);
+      render();
+      return true;
+    }
+
+    function buildNotifications(results) {
+      const [messages, feedback, homework, quizzes, events, payments] = results;
+      const items = [
+        ...messages.map(item => ({
+          type:"message", id:item.id, classId:item.class_id, title:item.title,
+          description:item.body, date:item.created_at, important:item.is_important,
+          urgent:false, deadline:false, href:"portal.html#messages"
+        })),
+        ...feedback.map(item => ({
+          type:"feedback", id:item.id, classId:item.class_id, title:item.focus,
+          description:item.next_step ? `Næste skridt: ${item.next_step}` : item.feedback_text,
+          date:item.created_at, important:true, urgent:false, deadline:false,
+          href:authState.profile.role === "student" || authState.profile.role === "parent" ? "portal.html#feedback" : "feedback.html"
+        })),
+        ...homework.map(item => {
+          const due = item.due_date ? new Date(`${item.due_date}T23:59:59`) : null;
+          const overdue = due && due < new Date();
+          return {
+            type:"homework", id:item.id, classId:item.class_id, title:item.title,
+            description:overdue ? "Fristen er overskredet." : (item.description || "Ny lektie er klar."),
+            date:due?.toISOString() || item.created_at, important:Boolean(due), urgent:Boolean(overdue),
+            deadline:Boolean(due), href:authState.profile.role === "student" || authState.profile.role === "parent" ? "assignments.html" : "resources.html"
+          };
+        }),
+        ...quizzes.map(item => {
+          const due = dateValue(item.due_at);
+          const overdue = due && due < new Date();
+          return {
+            type:"quiz", id:item.id, classId:item.class_id, title:item.title,
+            description:overdue ? "Fristen for læringstjekket er overskredet." : "Et læringstjek er klar.",
+            date:item.due_at || item.created_at, important:true, urgent:Boolean(overdue),
+            deadline:Boolean(item.due_at), href:"quizzes.html"
+          };
+        }),
+        ...events.map(item => ({
+          type:"event", id:item.id, classId:item.class_id, title:item.title,
+          description:item.details || (item.event_type === "lesson" ? "Kommende undervisning." : "Kommende aktivitet."),
+          date:`${item.event_date}T${item.start_time || "12:00:00"}`, important:false,
+          urgent:false, deadline:true, href:item.event_type === "lesson" ? "lesson-room.html" : "calendar.html"
+        })),
+        ...payments.filter(item => item.status === "pending").map(item => {
+          const due = new Date(`${item.due_date}T23:59:59`);
+          const overdue = due < new Date();
+          return {
+            type:"payment", id:item.id, classId:null, title:item.description,
+            description:`${Number(item.amount).toLocaleString("da-DK",{style:"currency",currency:"DKK"})}${overdue ? " · Betalingsfristen er overskredet." : ""}`,
+            date:due.toISOString(), important:true, urgent:overdue, deadline:true,
+            href:authState.profile.role === "admin" ? "payments.html" : "portal.html#payments"
+          };
+        })
+      ];
+
+      const recentLimit = new Date();
+      recentLimit.setDate(recentLimit.getDate() - 45);
+      notifications = items
+        .filter(item => item.urgent || item.deadline || !item.date || dateValue(item.date) >= recentLimit)
+        .sort((a,b) => {
+          if (a.urgent !== b.urgent) return a.urgent ? -1 : 1;
+          if (a.important !== b.important) return a.important ? -1 : 1;
+          return (dateValue(b.date)?.getTime() || 0) - (dateValue(a.date)?.getTime() || 0);
+        });
+    }
+
+    async function load() {
+      const today = new Date().toISOString().slice(0,10);
+      const [classResult, readResult, messageResult, feedbackResult, homeworkResult, quizResult, eventResult, paymentResult] = await Promise.all([
+        supabaseClient.from("classes").select("id,name").order("name"),
+        supabaseClient.from("notification_reads").select("source_type,source_id").eq("profile_id",authState.profile.id),
+        supabaseClient.from("class_messages").select("*").order("created_at",{ascending:false}).limit(50),
+        supabaseClient.from("student_feedback").select("*").order("created_at",{ascending:false}).limit(50),
+        supabaseClient.from("learning_items").select("*").eq("kind","homework").order("due_date",{ascending:true}).limit(50),
+        supabaseClient.from("quizzes").select("*").eq("status","published").order("created_at",{ascending:false}).limit(50),
+        supabaseClient.from("calendar_events").select("*").gte("event_date",today).order("event_date").order("start_time").limit(50),
+        supabaseClient.from("student_payments").select("*").eq("status","pending").order("due_date").limit(50)
+      ]);
+
+      const error = [classResult,readResult,messageResult,feedbackResult,homeworkResult,quizResult,eventResult,paymentResult]
+        .map(result => result.error).find(Boolean);
+      if (error) {
+        notificationList.innerHTML = '<article class="card empty">Notifikationerne kunne ikke hentes. Prøv at genindlæse siden.</article>';
+        return;
+      }
+
+      classNames = new Map((classResult.data || []).map(item => [item.id,item.name]));
+      readKeys = new Set((readResult.data || []).map(item => `${item.source_type}:${item.source_id}`));
+      buildNotifications([
+        messageResult.data || [],
+        feedbackResult.data || [],
+        homeworkResult.data || [],
+        quizResult.data || [],
+        eventResult.data || [],
+        paymentResult.data || []
+      ]);
+      render();
+    }
+
+    document.querySelector(".filter-row").addEventListener("click", event => {
+      const button = event.target.closest("button[data-filter]");
+      if (!button) return;
+      activeFilter = button.dataset.filter;
+      document.querySelectorAll("[data-filter]").forEach(item => item.classList.toggle("active",item === button));
+      render();
+    });
+
+    notificationList.addEventListener("click", async event => {
+      const readButton = event.target.closest("[data-read]");
+      if (readButton) {
+        const [type,id] = readButton.dataset.read.split(":");
+        await markRead(type,id);
+        return;
+      }
+      const openLink = event.target.closest("[data-open]");
+      if (openLink) {
+        const [type,id] = openLink.dataset.open.split(":");
+        await markRead(type,id);
+      }
+    });
+
+    markAllButton.addEventListener("click", async () => {
+      const unreadItems = notifications.filter(isUnread);
+      if (!unreadItems.length) return;
+      markAllButton.disabled = true;
+      markAllButton.textContent = "Gemmer…";
+      const rows = unreadItems.map(item => ({
+        profile_id:authState.profile.id,
+        source_type:item.type,
+        source_id:item.id,
+        read_at:new Date().toISOString()
+      }));
+      const { error } = await supabaseClient.from("notification_reads").upsert(rows,{onConflict:"profile_id,source_type,source_id"});
+      if (error) {
+        alert("Notifikationerne kunne ikke opdateres.");
+      } else {
+        rows.forEach(item => readKeys.add(`${item.source_type}:${item.source_id}`));
+        render();
+      }
+      markAllButton.textContent = "Markér alle som læst";
+    });
+
+    (async () => {
+      authState = await requireRole(["admin","teacher","parent","student"]);
+      if (!authState) return;
+      loading.hidden = true;
+      app.hidden = false;
+      await load();
+    })();
+  </script>
+</body>
+</html>

@@ -47,6 +47,7 @@ function setupCampusNavigation(role = null) {
       label: "Overblik",
       links: [
         ["admin.html", "Ansøgninger"],
+        ["notifications.html", "Notifikationer"],
         ["reports.html", "Rapporter"]
       ]
     },
@@ -87,6 +88,7 @@ function setupCampusNavigation(role = null) {
       label: "Overblik",
       links: [
         ["teacher.html", "Mit lærerbord"],
+        ["notifications.html", "Notifikationer"],
         ["portal.html", "Mit Campus"]
       ]
     },
@@ -123,7 +125,7 @@ function setupCampusNavigation(role = null) {
   ]);
 
   const portalMenu = [
-    { label: "Overblik", links: existingLinks.filter(([href]) => href === "portal.html") },
+    { label: "Overblik", links: existingLinks.filter(([href]) => ["portal.html", "notifications.html"].includes(href)) },
     {
       label: "Læring",
       links: existingLinks.filter(([href]) =>
