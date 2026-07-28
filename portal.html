@@ -35,6 +35,11 @@
     .calendar-list{display:grid;gap:12px}.calendar-card{display:grid;grid-template-columns:68px 1fr;gap:14px;align-items:start}
     .calendar-date{background:var(--brand-soft);color:var(--brand);border-radius:13px;text-align:center;padding:10px 6px}.calendar-date b{display:block;font-size:25px}.calendar-date span{font-size:11px;font-weight:800;text-transform:uppercase}
     .progress-list{display:grid;gap:12px}.progress-row{display:grid;gap:9px}.progress-row h2{font-family:Georgia,serif;font-weight:500;font-size:23px;margin:3px 0}.level-bar{height:8px;background:#e8ece9;border-radius:99px;overflow:hidden}.level-bar span{display:block;height:100%;background:var(--brand)}
+    .class-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+    .class-card{display:grid;gap:10px}
+    .class-card h3{font-family:Georgia,serif;font-weight:500;font-size:25px;margin:0}
+    .class-meta{display:flex;gap:8px;flex-wrap:wrap}
+    .class-meta span{padding:7px 10px;border-radius:999px;background:var(--brand-soft);color:var(--brand);font-size:12px;font-weight:750}
     @media(max-width:900px){.campus-grid{grid-template-columns:1fr}}
   </style>
 </head>
@@ -79,6 +84,17 @@
         <article class="card stat"><span class="muted">Mine hold</span><strong id="classCount">—</strong></article>
         <article class="card stat"><span class="muted">Materialer</span><strong id="materialCount">—</strong></article>
         <article class="card stat"><span class="muted">Åbne lektier</span><strong id="homeworkCount">—</strong></article>
+      </section>
+
+      <section id="classes" style="margin-top:28px">
+        <div class="topbar">
+          <div>
+            <span class="eyebrow">Tilknytning</span>
+            <h2 id="classSectionTitle" style="margin:4px 0">Mine hold</h2>
+            <p id="classSectionIntro" class="muted">Her kan du se dine aktive hold.</p>
+          </div>
+        </div>
+        <div id="classList" class="class-list"><article class="card empty">Der er endnu ikke tilknyttet et hold.</article></div>
       </section>
 
       <section id="feedback" style="margin-top:28px">
@@ -236,6 +252,19 @@
       progressList.innerHTML=progressRows.length?progressRows.map(item=>{const student=students.find(entry=>entry.id===item.student_id);return `<article class="card progress-row"><div style="display:flex;justify-content:space-between;gap:12px"><div><span class="eyebrow">${escapeHtml(student?.full_name||"Elev")} · ${escapeHtml(item.subject)}</span><h2>${escapeHtml(item.skill)}</h2></div><b style="color:var(--brand);font-size:22px">${item.level}/5</b></div><div class="level-bar"><span style="width:${item.level*20}%"></span></div>${item.notes?`<p>${escapeHtml(item.notes)}</p>`:""}${item.next_goal?`<div class="next-step"><b>Næste mål</b><br>${escapeHtml(item.next_goal)}</div>`:""}</article>`}).join(""):'<article class="card empty">Der er endnu ikke registreret udvikling.</article>';
     }
 
+    function renderClasses(){
+      const studentNames = students.map(student => student.full_name).filter(Boolean).join(", ");
+      classList.innerHTML = classes.length ? classes.map(item => `<article class="card class-card">
+        <span class="eyebrow">${currentRole === "parent" ? "Barnets hold" : "Aktivt hold"}</span>
+        <h3>${escapeHtml(item.name)}</h3>
+        ${currentRole === "parent" && studentNames ? `<p class="muted">${escapeHtml(studentNames)}</p>` : ""}
+        <div class="class-meta">
+          <span>${escapeHtml(item.weekday || "Dag ikke fastlagt")}</span>
+          <span>${item.start_time ? `Kl. ${escapeHtml(item.start_time.slice(0,5))}` : "Tid ikke fastlagt"}</span>
+        </div>
+      </article>`).join("") : '<article class="card empty">Der er endnu ikke tilknyttet et hold.</article>';
+    }
+
     async function loadCampus(auth) {
       const role = auth.profile.role;
       currentRole = role;
@@ -244,7 +273,7 @@
 
       if (role === "admin" || role === "teacher") {
         const [classResult, learningResult, studentResult, feedbackResult, messageResult, paymentResult, calendarResult, progressResult] = await Promise.all([
-          supabaseClient.from("classes").select("id,name").order("name"),
+          supabaseClient.from("classes").select("id,name,weekday,start_time").order("name"),
           supabaseClient.from("learning_items").select("*").order("created_at", { ascending:false }),
           supabaseClient.from("students").select("id,full_name").order("full_name"),
           supabaseClient.from("student_feedback").select("*").order("created_at",{ascending:false}),
@@ -277,7 +306,7 @@
         }
         if (classIds.length) {
           const [classResult, learningResult, feedbackResult, messageResult] = await Promise.all([
-            supabaseClient.from("classes").select("id,name").in("id", classIds).order("name"),
+            supabaseClient.from("classes").select("id,name,weekday,start_time").in("id", classIds).order("name"),
             supabaseClient.from("learning_items").select("*").in("class_id", classIds).order("created_at", { ascending:false }),
             supabaseClient.from("student_feedback").select("*").in("student_id",students.map(student => student.id)).order("created_at",{ascending:false}),
             supabaseClient.from("class_messages").select("*").in("class_id",classIds).order("created_at",{ascending:false})
@@ -305,6 +334,7 @@
       classCount.textContent = classes.length;
       materialCount.textContent = learningItems.filter(item => item.kind === "material").length;
       homeworkCount.textContent = learningItems.filter(item => item.kind === "homework" && (!item.due_date || item.due_date >= today)).length;
+      renderClasses();
       await renderLearning();
       renderFeedback();
       renderMessages();
@@ -337,10 +367,14 @@
       document.getElementById("payments").hidden = role !== "parent" && role !== "admin";
       if (role === "student") {
         intro.textContent = "Se din næste undervisning, dine opgaver og dit næste mål.";
+        classSectionTitle.textContent = "Mit hold";
+        classSectionIntro.textContent = "Her kan du se det hold, du er tilknyttet.";
         document.querySelector("#feedback h2").textContent = "Feedback og mine mål";
       }
       if (role === "parent") {
         intro.textContent = "Følg dit barns læring, trivsel og næste skridt.";
+        classSectionTitle.textContent = "Mit barns hold";
+        classSectionIntro.textContent = "Her kan du se barnets aktuelle hold og undervisningstid.";
         document.querySelector("#learning .tabs").setAttribute("aria-label","Filtrér barnets læringsindhold");
       }
       if (role === "teacher") {
