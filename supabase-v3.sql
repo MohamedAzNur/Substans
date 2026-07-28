@@ -389,6 +389,21 @@ create policy "Members read calendar events" on public.calendar_events for selec
 using (public.can_access_class(class_id));
 grant select,insert,update,delete on public.calendar_events to authenticated;
 
+-- Knyt materiale og lektier til den konkrete lektion, når de oprettes i det samlede lærerflow.
+alter table public.learning_items
+add column if not exists calendar_event_id uuid
+references public.calendar_events(id) on delete set null;
+
+create index if not exists learning_items_calendar_event_id_idx
+on public.learning_items(calendar_event_id);
+
+alter table public.student_feedback
+add column if not exists calendar_event_id uuid
+references public.calendar_events(id) on delete set null;
+
+create index if not exists student_feedback_calendar_event_id_idx
+on public.student_feedback(calendar_event_id);
+
 -- Faglig progression med forståelse og næste mål.
 create table if not exists public.student_progress (
   id uuid primary key default gen_random_uuid(),

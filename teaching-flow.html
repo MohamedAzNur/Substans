@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Planlæg undervisning · Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .flow-hero{position:relative;overflow:hidden;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(260px,.75fr);gap:24px;align-items:end;background:linear-gradient(135deg,#17372c,#2b5d4a);color:#fff;border:0;margin-bottom:16px}
+    .flow-hero::after{content:"";position:absolute;width:300px;height:300px;right:-110px;top:-170px;border-radius:50%;background:rgba(255,255,255,.07)}
+    .flow-hero .eyebrow,.flow-hero .muted{color:#bed1c7}.flow-hero h2{font-family:Georgia,serif;font-size:clamp(30px,4vw,45px);font-weight:500;line-height:1.08;margin:7px 0}
+    .flow-hero>*{position:relative;z-index:1}.hero-note{padding:16px;border:1px solid rgba(255,255,255,.16);border-radius:15px;background:rgba(255,255,255,.08)}
+    .journey{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:16px 0 22px}
+    .journey a{display:grid;grid-template-columns:34px minmax(0,1fr);gap:9px;align-items:center;padding:11px;border:1px solid var(--line);border-radius:13px;background:#fff;color:var(--muted)}
+    .journey a.active,.journey a.complete{border-color:#9db9aa;color:var(--brand);background:#f4f8f5}.journey-number{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:var(--brand-soft);color:var(--brand);font-weight:850}
+    .journey a.complete .journey-number{background:var(--brand);color:#fff}.journey small,.journey strong{display:block}.journey small{font-size:11px}.journey strong{font-size:13px}
+    .flow-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr);gap:16px;align-items:start}.flow-main{display:grid;gap:16px}
+    .flow-section{display:grid;gap:18px;scroll-margin-top:20px}.section-head{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:13px;align-items:start}
+    .step-number{display:grid;place-items:center;width:48px;height:48px;border-radius:14px;background:var(--brand-soft);color:var(--brand);font-size:18px;font-weight:850}
+    .section-head h2{font-family:Georgia,serif;font-size:29px;font-weight:500;margin:2px 0}.step-status{padding:6px 10px;border-radius:999px;background:#eef1ef;color:var(--muted);font-size:12px;font-weight:800}.step-status.complete{background:#e6f4ea;color:#26653a}
+    .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.form-grid label{display:grid;gap:7px;font-size:13px;font-weight:750}.form-grid label.wide{grid-column:1/-1}
+    .form-grid input,.form-grid select,.form-grid textarea{width:100%;padding:12px;border:1px solid #cbd4cf;border-radius:11px;background:#fff}.form-grid textarea{resize:vertical}
+    .form-grid input:focus,.form-grid select:focus,.form-grid textarea:focus{outline:2px solid #93ac9f;outline-offset:1px}.form-actions{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+    .inline-status{color:var(--muted);font-size:13px}.locked{opacity:.55;pointer-events:none}.file-field{padding:13px;border:1px dashed #aabbb2;border-radius:12px;background:#f8faf9}
+    .file-field input{padding:7px 0;border:0;background:transparent}.file-hint{font-size:12px;color:var(--muted);font-weight:500}
+    .flow-aside{position:sticky;top:22px;display:grid;gap:16px}.summary-list{display:grid;gap:10px;margin-top:15px}
+    .summary-row{display:grid;grid-template-columns:30px minmax(0,1fr);gap:10px;align-items:center;padding:10px;border-radius:12px;background:#f6f8f6}
+    .summary-mark{display:grid;place-items:center;width:30px;height:30px;border-radius:10px;background:#e5e9e6;color:#75817b;font-weight:850}.summary-row.complete .summary-mark{background:var(--brand);color:#fff}
+    .summary-row strong,.summary-row small{display:block}.summary-row small{color:var(--muted)}.student-preview{display:grid;gap:13px}
+    .preview-label{display:flex;align-items:center;justify-content:space-between;gap:10px}.preview-block{padding:13px;border:1px solid var(--line);border-radius:13px;background:#f8faf9}
+    .preview-block span{display:block;color:var(--muted);font-size:11px;font-weight:850;letter-spacing:.08em;text-transform:uppercase}.preview-block strong{display:block;margin-top:4px}
+    .preview-actions{display:flex;gap:8px;flex-wrap:wrap}.success-panel{border-left:4px solid #3d7b55;background:#f2f8f3}.success-panel h3{font-family:Georgia,serif;font-size:24px;font-weight:500;margin:4px 0}
+    @media(max-width:1050px){.flow-hero,.flow-layout{grid-template-columns:1fr}.flow-aside{position:static}.journey{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:650px){.journey,.form-grid{grid-template-columns:1fr}.form-grid label.wide{grid-column:auto}.section-head{grid-template-columns:42px 1fr}.step-number{width:42px;height:42px}.step-status{grid-column:2}.flow-hero{padding:22px}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Gør undervisningsflowet klar…</div>
+
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="index.html">Substans</a>
+      <nav class="nav">
+        <a href="teacher.html">Mit lærerbord</a>
+        <a class="active" href="teaching-flow.html">Planlæg undervisning</a>
+        <a href="lesson-room.html">Lektionsrum</a>
+        <a href="resources.html">Materialer og lektier</a>
+        <a href="assignments.html">Afleveringer</a>
+        <a href="feedback.html">Feedback</a>
+      </nav>
+      <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <span class="eyebrow">Underviserens arbejdsflow</span>
+          <h1 class="title">Planlæg hele undervisningen</h1>
+          <p class="muted">Fra første idé til elevens næste skridt — samlet på én side.</p>
+        </div>
+        <button id="newFlowButton" class="button secondary" type="button">Start ny undervisning</button>
+      </header>
+
+      <section class="card flow-hero">
+        <div>
+          <span class="eyebrow">Substans-metoden</span>
+          <h2>Gør læringen tydelig før, under og efter timen.</h2>
+          <p class="muted">Planlæg lektionen, del det nødvendige og følg op. Eleven ser automatisk resultatet i sit Campus.</p>
+        </div>
+        <div class="hero-note">
+          <b>Ét samlet flow</b>
+          <p class="muted" style="margin:6px 0 0">Du kan gemme undervejs. De næste trin åbner, så snart lektionen er oprettet.</p>
+        </div>
+      </section>
+
+      <nav class="journey" aria-label="Undervisningsflow">
+        <a id="journeyLesson" class="active" href="#lessonForm"><span class="journey-number">1</span><span><small>Før timen</small><strong>Lektion</strong></span></a>
+        <a id="journeyMaterial" href="#materialForm"><span class="journey-number">2</span><span><small>Forberedelse</small><strong>Materiale</strong></span></a>
+        <a id="journeyHomework" href="#homeworkForm"><span class="journey-number">3</span><span><small>Efter timen</small><strong>Lektie</strong></span></a>
+        <a id="journeyFeedback" href="#feedbackForm"><span class="journey-number">4</span><span><small>Opfølgning</small><strong>Feedback</strong></span></a>
+      </nav>
+
+      <div class="flow-layout">
+        <div class="flow-main">
+          <form id="lessonForm" class="card flow-section">
+            <div class="section-head">
+              <span class="step-number">1</span>
+              <div><span class="eyebrow">Før undervisningen</span><h2>Planlæg lektionen</h2><p class="muted">Vælg hold, tidspunkt og det vigtigste læringsmål.</p></div>
+              <span id="lessonStatus" class="step-status">Ikke gemt</span>
+            </div>
+            <div class="form-grid">
+              <label>Hold<select id="classId" required><option value="">Vælg hold</option></select></label>
+              <label>Titel<input id="lessonTitle" required maxlength="160" placeholder="Fx Sīrah · De første åbenbaringer"></label>
+              <label>Dato<input id="lessonDate" required type="date"></label>
+              <label>Tidspunkt<input id="lessonTime" type="time"></label>
+              <label>Varighed<input id="durationMinutes" type="number" min="15" max="480" step="15" value="60"></label>
+              <label>Mødelink<input id="meetingUrl" type="url" placeholder="https://meet.google.com/…"></label>
+              <label class="wide">Læringsmål<textarea id="learningGoal" required rows="3" maxlength="2000" placeholder="Hvad skal eleverne forstå efter lektionen?"></textarea></label>
+              <label class="wide">Lektionens plan<textarea id="agenda" rows="5" maxlength="4000" placeholder="1. Velkomst og repetition&#10;2. Dagens emne&#10;3. Refleksion og spørgsmål"></textarea></label>
+              <label class="wide">Forberedelse<textarea id="preparation" rows="3" maxlength="2000" placeholder="Hvad skal eleven have klar inden timen?"></textarea></label>
+            </div>
+            <div class="form-actions"><button id="saveLessonButton" class="button" type="submit">Gem lektion og fortsæt</button><span id="lessonMessage" class="inline-status" role="status"></span></div>
+          </form>
+
+          <form id="materialForm" class="card flow-section locked">
+            <div class="section-head">
+              <span class="step-number">2</span>
+              <div><span class="eyebrow">Til lektionen</span><h2>Del materiale</h2><p class="muted">Giv eleven det, der skaber klarhed og forberedelse.</p></div>
+              <span id="materialStatus" class="step-status">Afventer lektion</span>
+            </div>
+            <div class="form-grid">
+              <label class="wide">Titel<input id="materialTitle" required maxlength="160" placeholder="Fx Kort over Makkah-periodens vigtigste begivenheder"></label>
+              <label class="wide">Beskrivelse<textarea id="materialDescription" rows="3" maxlength="2000" placeholder="Sådan skal materialet bruges…"></textarea></label>
+              <label>Link<input id="materialUrl" type="url" placeholder="https://…"></label>
+              <label class="file-field">Vedhæft fil<input id="materialFile" type="file"><span class="file-hint">PDF, Word, PowerPoint, billede, lyd eller video. Maks. 50 MB.</span></label>
+            </div>
+            <div class="form-actions"><button id="saveMaterialButton" class="button" type="submit">Del materiale</button><span id="materialMessage" class="inline-status" role="status"></span></div>
+          </form>
+
+          <form id="homeworkForm" class="card flow-section locked">
+            <div class="section-head">
+              <span class="step-number">3</span>
+              <div><span class="eyebrow">Efter undervisningen</span><h2>Giv lektie</h2><p class="muted">Gør opgaven og afleveringsfristen helt tydelig.</p></div>
+              <span id="homeworkStatus" class="step-status">Afventer lektion</span>
+            </div>
+            <div class="form-grid">
+              <label class="wide">Titel<input id="homeworkTitle" required maxlength="160" placeholder="Fx Reflektér over de første åbenbaringer"></label>
+              <label class="wide">Opgavebeskrivelse<textarea id="homeworkDescription" required rows="4" maxlength="3000" placeholder="Hvad skal eleven gøre og aflevere?"></textarea></label>
+              <label>Afleveringsfrist<input id="homeworkDueDate" required type="date"></label>
+              <label>Supplerende link<input id="homeworkUrl" type="url" placeholder="https://…"></label>
+              <label class="wide file-field">Vedhæft opgave<input id="homeworkFile" type="file"><span class="file-hint">PDF, Word, PowerPoint, billede, lyd eller video. Maks. 50 MB.</span></label>
+            </div>
+            <div class="form-actions"><button id="saveHomeworkButton" class="button" type="submit">Del lektie</button><span id="homeworkMessage" class="inline-status" role="status"></span></div>
+          </form>
+
+          <form id="feedbackForm" class="card flow-section locked">
+            <div class="section-head">
+              <span class="step-number">4</span>
+              <div><span class="eyebrow">Personlig opfølgning</span><h2>Giv feedback</h2><p class="muted">Fortæl eleven, hvad der lykkedes, og hvad næste skridt er.</p></div>
+              <span id="feedbackStatus" class="step-status">Afventer lektion</span>
+            </div>
+            <div class="form-grid">
+              <label>Elev<select id="studentId" required><option value="">Vælg elev</option></select></label>
+              <label>Fokus<input id="feedbackFocus" required maxlength="120" placeholder="Fx Refleksion og deltagelse"></label>
+              <label class="wide">Observation<textarea id="feedbackText" required rows="4" maxlength="2000" placeholder="Hvad lykkedes eleven med?"></textarea></label>
+              <label class="wide">Næste skridt<textarea id="nextStep" rows="3" maxlength="1000" placeholder="Hvad kan eleven arbejde videre med?"></textarea></label>
+            </div>
+            <div class="form-actions"><button id="saveFeedbackButton" class="button" type="submit">Gem feedback</button><span id="feedbackMessage" class="inline-status" role="status"></span></div>
+          </form>
+        </div>
+
+        <aside class="flow-aside">
+          <article class="card">
+            <span class="eyebrow">Dit overblik</span>
+            <h2 style="font-family:Georgia,serif;font-size:27px;font-weight:500;margin:5px 0">Undervisningen tager form</h2>
+            <div class="summary-list">
+              <div id="summaryLesson" class="summary-row"><span class="summary-mark">1</span><span><strong>Lektion</strong><small>Plan og læringsmål</small></span></div>
+              <div id="summaryMaterial" class="summary-row"><span class="summary-mark">2</span><span><strong>Materiale</strong><small>Forberedelse til eleven</small></span></div>
+              <div id="summaryHomework" class="summary-row"><span class="summary-mark">3</span><span><strong>Lektie</strong><small>Tydelig opgave og frist</small></span></div>
+              <div id="summaryFeedback" class="summary-row"><span class="summary-mark">4</span><span><strong>Feedback</strong><small>Personligt næste skridt</small></span></div>
+            </div>
+          </article>
+
+          <article class="card student-preview">
+            <div class="preview-label"><span class="eyebrow">Elevens Campus</span><span class="badge">Live preview</span></div>
+            <div class="preview-block"><span>Næste lektion</span><strong id="previewLesson">Ikke planlagt endnu</strong><small id="previewDate" class="muted">Dato og tid vises her</small></div>
+            <div class="preview-block"><span>Læringsmål</span><strong id="previewGoal">Tilføj et tydeligt mål</strong></div>
+            <div class="preview-block"><span>Materiale</span><strong id="previewMaterial">Ikke delt endnu</strong></div>
+            <div class="preview-block"><span>Lektie</span><strong id="previewHomework">Ikke delt endnu</strong></div>
+            <div class="preview-block"><span>Feedback</span><strong id="previewFeedback">Ikke skrevet endnu</strong></div>
+            <div id="previewActions" class="preview-actions" hidden>
+              <a id="openRoomLink" class="button" href="lesson-room.html">Åbn lektionsrum</a>
+              <a class="button secondary" href="portal.html">Se Campus</a>
+            </div>
+          </article>
+
+          <article id="completePanel" class="card success-panel" hidden>
+            <span class="eyebrow">Klar</span>
+            <h3>Hele forløbet er samlet</h3>
+            <p class="muted">Eleven kan nu se lektionen, materialet, lektien og feedbacken i sit Campus.</p>
+          </article>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    let authState;
+    let classes = [];
+    let students = [];
+    let enrollments = [];
+    let currentEvent = null;
+    let currentRoom = null;
+    let lessonItems = [];
+    let lessonFeedback = [];
+
+    const steps = {
+      lesson:{journey:journeyLesson,summary:summaryLesson,status:lessonStatus},
+      material:{journey:journeyMaterial,summary:summaryMaterial,status:materialStatus},
+      homework:{journey:journeyHomework,summary:summaryHomework,status:homeworkStatus},
+      feedback:{journey:journeyFeedback,summary:summaryFeedback,status:feedbackStatus}
+    };
+
+    function setStepComplete(name,complete,label) {
+      steps[name].journey.classList.toggle("complete",complete);
+      steps[name].summary.classList.toggle("complete",complete);
+      steps[name].summary.querySelector(".summary-mark").textContent = complete ? "✓" : ({lesson:"1",material:"2",homework:"3",feedback:"4"}[name]);
+      steps[name].status.classList.toggle("complete",complete);
+      steps[name].status.textContent = complete ? (label || "Færdig") : (currentEvent || name === "lesson" ? "Ikke gemt" : "Afventer lektion");
+    }
+
+    function setUnlocked(unlocked) {
+      [materialForm,homeworkForm,feedbackForm].forEach(form => form.classList.toggle("locked",!unlocked));
+    }
+
+    function formatDate(date,time) {
+      if (!date) return "Dato og tid vises her";
+      const formatted = new Date(date+"T12:00:00").toLocaleDateString("da-DK",{weekday:"long",day:"numeric",month:"long"});
+      return `${formatted}${time ? ` kl. ${time.slice(0,5)}` : ""}`;
+    }
+
+    function renderPreview() {
+      const material = lessonItems.find(item => item.kind === "material");
+      const homework = lessonItems.find(item => item.kind === "homework");
+      previewLesson.textContent = lessonTitle.value.trim() || currentEvent?.title || "Ikke planlagt endnu";
+      previewDate.textContent = formatDate(lessonDate.value || currentEvent?.event_date,lessonTime.value || currentEvent?.start_time);
+      previewGoal.textContent = learningGoal.value.trim() || currentRoom?.learning_goal || "Tilføj et tydeligt mål";
+      previewMaterial.textContent = material?.title || materialTitle.value.trim() || "Ikke delt endnu";
+      previewHomework.textContent = homework?.title || homeworkTitle.value.trim() || "Ikke delt endnu";
+      previewFeedback.textContent = lessonFeedback[0]?.focus || feedbackFocus.value.trim() || "Ikke skrevet endnu";
+    }
+
+    function updateProgress() {
+      const hasMaterial = lessonItems.some(item => item.kind === "material");
+      const hasHomework = lessonItems.some(item => item.kind === "homework");
+      setStepComplete("lesson",Boolean(currentEvent && currentRoom),"Gemt");
+      setStepComplete("material",hasMaterial,hasMaterial ? "Delt" : null);
+      setStepComplete("homework",hasHomework,hasHomework ? "Delt" : null);
+      setStepComplete("feedback",lessonFeedback.length > 0,lessonFeedback.length ? "Gemt" : null);
+      setUnlocked(Boolean(currentEvent));
+      previewActions.hidden = !currentEvent;
+      if (currentEvent) openRoomLink.href = `lesson-room.html?event=${encodeURIComponent(currentEvent.id)}`;
+      completePanel.hidden = !(currentEvent && hasMaterial && hasHomework && lessonFeedback.length);
+      renderPreview();
+    }
+
+    function defaultDates() {
+      const now = new Date();
+      const daysUntilSunday = (7-now.getDay())%7 || 7;
+      const lesson = new Date(now);
+      lesson.setDate(now.getDate()+daysUntilSunday);
+      lessonDate.value = lesson.toISOString().slice(0,10);
+      const due = new Date(lesson);
+      due.setDate(lesson.getDate()+6);
+      homeworkDueDate.value = due.toISOString().slice(0,10);
+    }
+
+    function loadLessonIntoForm() {
+      if (!currentEvent) return;
+      classId.value = currentEvent.class_id;
+      classId.disabled = true;
+      lessonTitle.value = currentEvent.title || "";
+      lessonDate.value = currentEvent.event_date || "";
+      lessonTime.value = currentEvent.start_time?.slice(0,5) || "";
+      durationMinutes.value = currentEvent.duration_minutes || 60;
+      meetingUrl.value = currentEvent.meeting_url || "";
+      learningGoal.value = currentRoom?.learning_goal || "";
+      agenda.value = currentRoom?.agenda || "";
+      preparation.value = currentRoom?.preparation || currentEvent.details || "";
+      if (currentEvent.event_date) {
+        const due = new Date(currentEvent.event_date+"T12:00:00");
+        due.setDate(due.getDate()+6);
+        homeworkDueDate.value = due.toISOString().slice(0,10);
+      }
+    }
+
+    function renderStudents() {
+      const ids = enrollments.filter(item => item.class_id === classId.value).map(item => item.student_id);
+      const available = students.filter(item => ids.includes(item.id));
+      studentId.innerHTML = available.length
+        ? '<option value="">Vælg elev</option>'+available.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.full_name)}</option>`).join("")
+        : '<option value="">Ingen elever på holdet</option>';
+      studentId.disabled = !available.length;
+    }
+
+    async function uploadAttachment(file,kind) {
+      if (!file) return {path:null,name:null,type:null,size:null};
+      if (file.size > 50*1024*1024) throw new Error("Filen er større end 50 MB.");
+      const safeName = file.name.normalize("NFKD").replace(/[^\w.-]+/g,"-").replace(/-+/g,"-");
+      const path = `${currentEvent.class_id}/${currentEvent.id}/${kind}/${crypto.randomUUID()}-${safeName}`;
+      const {error} = await supabaseClient.storage.from("learning-attachments").upload(path,file,{contentType:file.type||"application/octet-stream",upsert:false});
+      if (error) throw error;
+      return {path,name:file.name,type:file.type||null,size:file.size};
+    }
+
+    async function loadFlow() {
+      const [classResult,studentResult,enrollmentResult] = await Promise.all([
+        supabaseClient.from("classes").select("id,name").eq("status","active").order("name"),
+        supabaseClient.from("students").select("id,full_name").order("full_name"),
+        supabaseClient.from("class_enrollments").select("class_id,student_id")
+      ]);
+      const error = classResult.error || studentResult.error || enrollmentResult.error;
+      if (error) {
+        lessonMessage.textContent = "Undervisningsdata kunne ikke hentes.";
+        return;
+      }
+      classes = classResult.data || [];
+      students = studentResult.data || [];
+      enrollments = enrollmentResult.data || [];
+      classId.innerHTML = '<option value="">Vælg hold</option>'+classes.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
+
+      const requestedEvent = new URLSearchParams(window.location.search).get("event");
+      if (requestedEvent) {
+        const [eventResult,roomResult,itemResult] = await Promise.all([
+          supabaseClient.from("calendar_events").select("*").eq("id",requestedEvent).eq("event_type","lesson").maybeSingle(),
+          supabaseClient.from("lesson_rooms").select("*").eq("calendar_event_id",requestedEvent).maybeSingle(),
+          supabaseClient.from("learning_items").select("*").eq("calendar_event_id",requestedEvent).order("created_at",{ascending:false})
+        ]);
+        currentEvent = eventResult.data || null;
+        currentRoom = roomResult.data || null;
+        lessonItems = itemResult.data || [];
+        if (currentEvent) {
+          const classStudentIds = enrollments.filter(item => item.class_id === currentEvent.class_id).map(item => item.student_id);
+          if (classStudentIds.length) {
+            const {data} = await supabaseClient.from("student_feedback").select("*").in("student_id",classStudentIds).eq("calendar_event_id",currentEvent.id).order("created_at",{ascending:false});
+            lessonFeedback = data || [];
+          }
+          loadLessonIntoForm();
+        }
+      }
+      renderStudents();
+      updateProgress();
+    }
+
+    lessonForm.addEventListener("submit",async event => {
+      event.preventDefault();
+      saveLessonButton.disabled = true;
+      lessonMessage.textContent = "Gemmer lektionen…";
+      const eventPayload = {
+        class_id:classId.value,
+        author_profile_id:authState.profile.id,
+        event_type:"lesson",
+        title:lessonTitle.value.trim(),
+        event_date:lessonDate.value,
+        start_time:lessonTime.value || null,
+        duration_minutes:lessonTime.value ? Number(durationMinutes.value||60) : null,
+        meeting_url:meetingUrl.value.trim() || null,
+        details:preparation.value.trim() || null
+      };
+      const eventQuery = currentEvent
+        ? supabaseClient.from("calendar_events").update(eventPayload).eq("id",currentEvent.id).select().single()
+        : supabaseClient.from("calendar_events").insert(eventPayload).select().single();
+      const {data:eventRow,error:eventError} = await eventQuery;
+      if (eventError) {
+        lessonMessage.textContent = "Lektionen kunne ikke gemmes.";
+        saveLessonButton.disabled = false;
+        return;
+      }
+      currentEvent = eventRow;
+      const {data:roomRow,error:roomError} = await supabaseClient.from("lesson_rooms").upsert({
+        calendar_event_id:currentEvent.id,
+        learning_goal:learningGoal.value.trim(),
+        agenda:agenda.value.trim() || null,
+        preparation:preparation.value.trim() || null,
+        status:"planned",
+        updated_by:authState.profile.id,
+        updated_at:new Date().toISOString()
+      },{onConflict:"calendar_event_id"}).select().single();
+      saveLessonButton.disabled = false;
+      if (roomError) {
+        lessonMessage.textContent = "Lektionen blev oprettet, men læringsmålet kunne ikke gemmes.";
+        return;
+      }
+      currentRoom = roomRow;
+      classId.disabled = true;
+      history.replaceState(null,"",`teaching-flow.html?event=${encodeURIComponent(currentEvent.id)}`);
+      renderStudents();
+      updateProgress();
+      lessonMessage.textContent = "Lektionen er gemt. Fortsæt med materialet.";
+      materialForm.scrollIntoView({behavior:"smooth",block:"start"});
+    });
+
+    async function saveLearningItem(kind,formConfig) {
+      const {form,button,message,title,description,url,file,dueDate} = formConfig;
+      if (!currentEvent) return;
+      button.disabled = true;
+      message.textContent = file.files[0] ? "Uploader fil…" : "Gemmer…";
+      let attachment = {path:null,name:null,type:null,size:null};
+      try {
+        attachment = await uploadAttachment(file.files[0]||null,kind);
+        const {data,error} = await supabaseClient.from("learning_items").insert({
+          class_id:currentEvent.class_id,
+          calendar_event_id:currentEvent.id,
+          kind,
+          title:title.value.trim(),
+          description:description.value.trim() || null,
+          resource_url:url.value.trim() || null,
+          file_path:attachment.path,
+          file_name:attachment.name,
+          file_type:attachment.type,
+          file_size:attachment.size,
+          due_date:kind === "homework" ? dueDate.value : null
+        }).select().single();
+        if (error) throw error;
+        lessonItems.unshift(data);
+        form.reset();
+        if (kind === "homework" && currentEvent.event_date) {
+          const due = new Date(currentEvent.event_date+"T12:00:00");
+          due.setDate(due.getDate()+6);
+          homeworkDueDate.value = due.toISOString().slice(0,10);
+        }
+        message.textContent = kind === "homework" ? "Lektien er delt med holdet." : "Materialet er delt med holdet.";
+        updateProgress();
+      } catch (error) {
+        if (attachment.path) await supabaseClient.storage.from("learning-attachments").remove([attachment.path]);
+        message.textContent = error.message === "Filen er større end 50 MB." ? error.message : "Indholdet kunne ikke deles.";
+      }
+      button.disabled = false;
+    }
+
+    materialForm.addEventListener("submit",event => {
+      event.preventDefault();
+      saveLearningItem("material",{form:materialForm,button:saveMaterialButton,message:materialMessage,title:materialTitle,description:materialDescription,url:materialUrl,file:materialFile});
+    });
+
+    homeworkForm.addEventListener("submit",event => {
+      event.preventDefault();
+      saveLearningItem("homework",{form:homeworkForm,button:saveHomeworkButton,message:homeworkMessage,title:homeworkTitle,description:homeworkDescription,url:homeworkUrl,file:homeworkFile,dueDate:homeworkDueDate});
+    });
+
+    feedbackForm.addEventListener("submit",async event => {
+      event.preventDefault();
+      if (!currentEvent) return;
+      saveFeedbackButton.disabled = true;
+      feedbackMessage.textContent = "Gemmer feedback…";
+      const {data,error} = await supabaseClient.from("student_feedback").insert({
+        student_id:studentId.value,
+        class_id:currentEvent.class_id,
+        calendar_event_id:currentEvent.id,
+        author_profile_id:authState.profile.id,
+        focus:feedbackFocus.value.trim(),
+        feedback_text:feedbackText.value.trim(),
+        next_step:nextStep.value.trim() || null
+      }).select().single();
+      saveFeedbackButton.disabled = false;
+      if (error) {
+        feedbackMessage.textContent = "Feedbacken kunne ikke gemmes.";
+        return;
+      }
+      lessonFeedback.unshift(data);
+      feedbackForm.reset();
+      renderStudents();
+      feedbackMessage.textContent = "Feedbacken er gemt og synlig for eleven og forældrene.";
+      updateProgress();
+    });
+
+    classId.addEventListener("change",renderStudents);
+    [lessonTitle,lessonDate,lessonTime,learningGoal,materialTitle,homeworkTitle,feedbackFocus].forEach(input => input.addEventListener("input",renderPreview));
+    newFlowButton.addEventListener("click",() => window.location.replace("teaching-flow.html"));
+
+    (async()=>{
+      const localPreview = ["127.0.0.1","localhost"].includes(window.location.hostname)
+        && new URLSearchParams(window.location.search).has("preview");
+      if (localPreview) {
+        authState = {profile:{id:"preview-admin",role:"admin",full_name:"Forhåndsvisning"}};
+        classes = [{id:"preview-class",name:"Grundforløb 1"}];
+        students = [{id:"preview-student",full_name:"Testbarn Substans"}];
+        enrollments = [{class_id:"preview-class",student_id:"preview-student"}];
+        defaultDates();
+        classId.innerHTML = '<option value="">Vælg hold</option><option value="preview-class">Grundforløb 1</option>';
+        loading.remove();
+        app.hidden = false;
+        updateProgress();
+        return;
+      }
+      authState = await requireRole(["admin","teacher"]);
+      if(!authState) return;
+      defaultDates();
+      loading.remove();
+      app.hidden = false;
+      await loadFlow();
+    })();
+  </script>
+</body>
+</html>

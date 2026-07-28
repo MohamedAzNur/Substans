@@ -64,6 +64,7 @@ function setupCampusNavigation(role = null) {
     {
       label: "Planlæg undervisning",
       links: [
+        ["teaching-flow.html", "Samlet undervisningsflow"],
         ["lesson-room.html", "Lektionsrum"],
         ["curriculum.html", "Undervisningsplan"],
         ["attendance.html", "Fremmøde"],
@@ -108,6 +109,7 @@ function setupCampusNavigation(role = null) {
     {
       label: "Dagens undervisning",
       links: [
+        ["teaching-flow.html", "Planlæg hele undervisningen"],
         ["lesson-room.html", "Lektionsrum"],
         ["attendance.html", "Fremmøde"],
         ["calendar.html", "Kalender"]

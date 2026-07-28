@@ -167,7 +167,9 @@
       }
       const room = rooms.find(item => item.calendar_event_id === event.id);
       const roomStatusValue = room?.status || "planned";
-      const resources = learningItems.filter(item => item.class_id === event.class_id).slice(0,5);
+      const resources = learningItems
+        .filter(item => item.class_id === event.class_id && (!item.calendar_event_id || item.calendar_event_id === event.id))
+        .slice(0,8);
       const resourceUrls = await Promise.all(resources.map(item => signedResourceUrl(item.file_path)));
 
       roomView.innerHTML = `<div class="room-content">
