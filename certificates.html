@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Certifikater · Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .certificate-layout{display:grid;grid-template-columns:minmax(320px,.72fr) minmax(0,1.28fr);gap:18px;align-items:start}
+    .certificate-form{position:sticky;top:24px}.certificate-form h2{font-family:Georgia,serif;font-size:27px;font-weight:500;margin:4px 0 8px}
+    .certificate-form select,.certificate-form textarea,.certificate-form input{width:100%;padding:12px 13px;border:1px solid #cbd4cf;border-radius:11px;background:#fff}
+    .certificate-form textarea{min-height:105px;resize:vertical}
+    .certificate-list{display:grid;gap:16px}
+    .certificate-sheet{position:relative;overflow:hidden;min-height:370px;padding:38px;border:1px solid #ccd9d2;border-radius:22px;background:linear-gradient(145deg,#fff 0%,#f7faf8 58%,#edf4ef 100%);box-shadow:0 15px 45px rgba(20,37,31,.07)}
+    .certificate-sheet::before,.certificate-sheet::after{content:"";position:absolute;border:1px solid rgba(35,79,63,.18);border-radius:50%}
+    .certificate-sheet::before{width:230px;height:230px;right:-120px;top:-110px}.certificate-sheet::after{width:160px;height:160px;left:-90px;bottom:-100px}
+    .certificate-brand{font-size:18px;font-weight:900;letter-spacing:-.04em}.certificate-kicker{margin-top:42px;color:#648071;font-size:11px;font-weight:850;letter-spacing:.15em;text-transform:uppercase}
+    .certificate-name{font-family:Georgia,serif;font-size:clamp(32px,5vw,49px);font-weight:500;letter-spacing:-.04em;margin:10px 0}
+    .certificate-title{font-size:19px;font-weight:850;margin:14px 0 5px}.certificate-achievement{max-width:660px;color:var(--muted);font-size:15px}
+    .certificate-footer{display:flex;justify-content:space-between;gap:20px;align-items:end;margin-top:38px;padding-top:18px;border-top:1px solid rgba(35,79,63,.16)}
+    .certificate-id{font-size:11px;color:var(--muted)}.certificate-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    .revoked{opacity:.58}.revoked::after{content:"ANNULLERET";position:absolute;inset:0;display:grid;place-items:center;color:#8b342c;font-size:36px;font-weight:900;letter-spacing:.12em;transform:rotate(-14deg)}
+    .filter-line{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px}
+    .filter-line select{padding:10px 12px;border:1px solid var(--line);border-radius:11px;background:#fff}
+    @media(max-width:980px){.certificate-layout{grid-template-columns:1fr}.certificate-form{position:static}}
+    @media(max-width:620px){.certificate-sheet{padding:26px;min-height:330px}.certificate-footer{align-items:start;flex-direction:column}}
+    @media print{
+      body *{visibility:hidden!important}
+      .certificate-sheet.print-target,.certificate-sheet.print-target *{visibility:visible!important}
+      .certificate-sheet.print-target{position:absolute;inset:0;width:100%;min-height:100vh;border:0;border-radius:0;box-shadow:none;padding:10vh 9vw;background:#fff}
+      .certificate-actions{display:none!important}
+    }
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Henter certifikater…</div>
+
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="index.html">Substans</a>
+      <nav class="nav">
+        <a href="portal.html">Mit overblik</a>
+        <a href="notifications.html">Notifikationer</a>
+        <a class="active" href="certificates.html">Certifikater</a>
+      </nav>
+      <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <span id="pageEyebrow" class="eyebrow">Milepæle</span>
+          <h1 class="title">Certifikater</h1>
+          <p id="pageIntro" class="muted">Synlige beviser på gennemførte niveauer og faglige milepæle.</p>
+        </div>
+        <span id="certificateCountBadge" class="badge">0 certifikater</span>
+      </header>
+
+      <section class="certificate-layout">
+        <form id="certificateForm" class="card certificate-form" hidden>
+          <span class="eyebrow">Nyt certifikat</span>
+          <h2>Markér en milepæl</h2>
+          <p class="muted">Udsted kun et certifikat, når læringsmålet reelt er gennemført.</p>
+
+          <div class="field">
+            <label for="classId">Hold</label>
+            <select id="classId" required><option value="">Vælg hold</option></select>
+          </div>
+          <div class="field">
+            <label for="studentId">Elev</label>
+            <select id="studentId" required><option value="">Vælg elev</option></select>
+          </div>
+          <div class="field">
+            <label for="certificateTitle">Titel</label>
+            <input id="certificateTitle" maxlength="100" placeholder="Fx Grundforløb 1 gennemført" required>
+          </div>
+          <div class="field">
+            <label for="subject">Fag</label>
+            <select id="subject">
+              <option value="">Tværfagligt</option>
+              <option>Qur’an</option><option>Sīrah</option><option>ʿAqīdah</option><option>Fiqh</option><option>Tarbiyah</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="achievement">Hvad har eleven opnået?</label>
+            <textarea id="achievement" maxlength="700" placeholder="Beskriv kort den gennemførte milepæl…" required></textarea>
+          </div>
+          <div class="field">
+            <label for="issuedOn">Dato</label>
+            <input id="issuedOn" type="date" required>
+          </div>
+          <button id="issueButton" class="button" type="submit">Udsted certifikat</button>
+          <div id="formStatus" class="status" role="status"></div>
+        </form>
+
+        <div>
+          <div class="filter-line">
+            <div>
+              <span class="eyebrow">Arkiv</span>
+              <h2 style="margin:4px 0">Gennemførte milepæle</h2>
+            </div>
+            <select id="certificateFilter" aria-label="Filtrér certifikater">
+              <option value="active">Aktive certifikater</option>
+              <option value="all">Alle inkl. annullerede</option>
+            </select>
+          </div>
+          <div id="certificateList" class="certificate-list">
+            <article class="card empty">Der er endnu ikke udstedt certifikater.</article>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    let authState;
+    let classes = [];
+    let students = [];
+    let enrollments = [];
+    let certificates = [];
+    let isStaff = false;
+
+    function showStatus(message,type) {
+      formStatus.textContent = message;
+      formStatus.className = `status show ${type}`;
+    }
+
+    function shortId(id) {
+      return `SUB-${String(id).replaceAll("-","").slice(0,10).toUpperCase()}`;
+    }
+
+    function studentName(id) {
+      return students.find(item => item.id === id)?.full_name || "Elev";
+    }
+
+    function className(id) {
+      return classes.find(item => item.id === id)?.name || "Substans";
+    }
+
+    function updateStudents() {
+      const ids = enrollments.filter(item => item.class_id === classId.value).map(item => item.student_id);
+      const available = students.filter(item => ids.includes(item.id));
+      studentId.innerHTML = '<option value="">Vælg elev</option>' + available.map(item =>
+        `<option value="${escapeHtml(item.id)}">${escapeHtml(item.full_name)}</option>`
+      ).join("");
+    }
+
+    function certificateCard(item) {
+      const revoked = Boolean(item.revoked_at);
+      return `
+        <article class="certificate-sheet ${revoked ? "revoked" : ""}" data-certificate="${escapeHtml(item.id)}">
+          <div class="certificate-brand">Substans</div>
+          <div class="certificate-kicker">Certifikat · ${escapeHtml(item.subject || "Tværfaglig læring")}</div>
+          <div class="certificate-name">${escapeHtml(studentName(item.student_id))}</div>
+          <div class="certificate-title">${escapeHtml(item.title)}</div>
+          <div class="certificate-achievement">${escapeHtml(item.achievement)}</div>
+          <div class="certificate-footer">
+            <div>
+              <strong>${escapeHtml(className(item.class_id))}</strong>
+              <div class="muted">${new Date(`${item.issued_on}T12:00:00`).toLocaleDateString("da-DK",{day:"numeric",month:"long",year:"numeric"})}</div>
+            </div>
+            <div class="certificate-id">Certifikat-ID<br><strong>${escapeHtml(shortId(item.id))}</strong></div>
+          </div>
+          <div class="certificate-actions">
+            ${!revoked ? `<button class="small-button button secondary" type="button" data-print="${escapeHtml(item.id)}">Udskriv / gem som PDF</button>` : ""}
+            ${isStaff && !revoked ? `<button class="small-button button danger" type="button" data-revoke="${escapeHtml(item.id)}">Annullér</button>` : ""}
+          </div>
+        </article>`;
+    }
+
+    function render() {
+      const visible = certificateFilter.value === "all" ? certificates : certificates.filter(item => !item.revoked_at);
+      certificateCountBadge.textContent = `${certificates.filter(item => !item.revoked_at).length} certifikater`;
+      certificateList.innerHTML = visible.length
+        ? visible.map(certificateCard).join("")
+        : '<article class="card empty">Der er endnu ikke udstedt certifikater.</article>';
+    }
+
+    async function load() {
+      const results = await Promise.all([
+        supabaseClient.from("classes").select("id,name").order("name"),
+        supabaseClient.from("students").select("id,full_name").order("full_name"),
+        supabaseClient.from("class_enrollments").select("class_id,student_id"),
+        supabaseClient.from("certificates").select("*").order("issued_on",{ascending:false}).order("created_at",{ascending:false})
+      ]);
+      const error = results.map(result => result.error).find(Boolean);
+      if (error) {
+        certificateList.innerHTML = '<article class="card empty">Certifikaterne kunne ikke hentes. Prøv at genindlæse siden.</article>';
+        return;
+      }
+      classes = results[0].data || [];
+      students = results[1].data || [];
+      enrollments = results[2].data || [];
+      certificates = results[3].data || [];
+      classId.innerHTML = '<option value="">Vælg hold</option>' + classes.map(item =>
+        `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`
+      ).join("");
+      render();
+    }
+
+    classId.addEventListener("change",updateStudents);
+    certificateFilter.addEventListener("change",render);
+
+    certificateForm.addEventListener("submit",async event => {
+      event.preventDefault();
+      issueButton.disabled = true;
+      issueButton.textContent = "Udsteder…";
+      const { data,error } = await supabaseClient.from("certificates").insert({
+        student_id:studentId.value,
+        class_id:classId.value,
+        title:certificateTitle.value.trim(),
+        subject:subject.value || null,
+        achievement:achievement.value.trim(),
+        issued_on:issuedOn.value,
+        issued_by:authState.profile.id
+      }).select().single();
+      if (error) {
+        showStatus("Certifikatet kunne ikke udstedes.","error");
+      } else {
+        certificates.unshift(data);
+        certificateForm.reset();
+        issuedOn.value = new Date().toISOString().slice(0,10);
+        updateStudents();
+        showStatus("Certifikatet er udstedt og synligt for familien.","success");
+        render();
+      }
+      issueButton.disabled = false;
+      issueButton.textContent = "Udsted certifikat";
+    });
+
+    certificateList.addEventListener("click",async event => {
+      const printButton = event.target.closest("[data-print]");
+      if (printButton) {
+        const sheet = document.querySelector(`[data-certificate="${printButton.dataset.print}"]`);
+        sheet.classList.add("print-target");
+        const clear = () => sheet.classList.remove("print-target");
+        window.addEventListener("afterprint",clear,{once:true});
+        window.print();
+        setTimeout(clear,1200);
+        return;
+      }
+      const revokeButton = event.target.closest("[data-revoke]");
+      if (!revokeButton || !confirm("Vil du annullere certifikatet? Det bliver bevaret i arkivet.")) return;
+      const { data,error } = await supabaseClient.from("certificates")
+        .update({revoked_at:new Date().toISOString()})
+        .eq("id",revokeButton.dataset.revoke)
+        .select().single();
+      if (error) {
+        alert("Certifikatet kunne ikke annulleres.");
+        return;
+      }
+      certificates = certificates.map(item => item.id === data.id ? data : item);
+      render();
+    });
+
+    (async () => {
+      authState = await requireRole(["admin","teacher","parent","student"]);
+      if (!authState) return;
+      isStaff = ["admin","teacher"].includes(authState.profile.role);
+      certificateForm.hidden = !isStaff;
+      certificateFilter.hidden = !isStaff;
+      if (!isStaff) {
+        pageEyebrow.textContent = "Mine milepæle";
+        pageIntro.textContent = "Her kan familien se og gemme elevens gennemførte niveauer.";
+      }
+      issuedOn.value = new Date().toISOString().slice(0,10);
+      loading.hidden = true;
+      app.hidden = false;
+      await load();
+    })();
+  </script>
+</body>
+</html>
