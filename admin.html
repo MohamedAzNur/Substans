@@ -21,6 +21,13 @@
     .detail{border:1px solid var(--line);border-radius:14px;padding:14px}
     .detail small{display:block;color:var(--muted);margin-bottom:5px}
     .detail-message{white-space:pre-wrap}
+    .admission-box{margin-top:20px;padding:18px;border:1px solid #b9ccc2;border-radius:16px;background:#f6faf7}
+    .admission-box h3{font-family:Georgia,serif;font-size:23px;font-weight:500;margin:3px 0 8px}
+    .admission-steps{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+    .admission-step{padding:7px 10px;border-radius:999px;background:#e8eeea;color:var(--muted);font-size:12px;font-weight:800}
+    .admission-step.done{background:var(--brand-soft);color:var(--brand)}
+    .admission-actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+    .admission-actions a{font-weight:800;color:var(--brand)}
     @media(max-width:620px){.detail-grid{grid-template-columns:1fr}.drawer{padding:22px}.table th:nth-child(4),.table td:nth-child(4){display:none}}
   </style>
 </head>
@@ -40,6 +47,7 @@
         <a href="feedback.html">Feedback</a>
         <a href="messages.html">Beskeder</a>
         <a href="payments.html">Betalinger</a>
+        <a href="calendar.html">Kalender</a>
         <a href="accounts.html">Kontoadgang</a>
       </nav>
       <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
@@ -102,6 +110,21 @@
   <script>
     const statusLabels = {new:"Ny",contacted:"Kontaktet",accepted:"Optaget",rejected:"Afslået"};
     let applications = [];
+    let classes = [];
+    let students = [];
+    let enrollments = [];
+
+    function studentForApplication(applicationId) {
+      return students.find(item => String(item.application_id) === String(applicationId));
+    }
+
+    function classOptions() {
+      return classes.filter(item => item.status !== "paused").map(item => {
+        const used = enrollments.filter(entry => entry.class_id === item.id).length;
+        const full = used >= item.capacity;
+        return `<option value="${escapeHtml(item.id)}" ${full ? "disabled" : ""}>${escapeHtml(item.name)} · ${used}/${item.capacity}${full ? " · fuldt" : ""}</option>`;
+      }).join("");
+    }
 
     async function updateStatus(id, status) {
       const { error } = await supabaseClient.from("applications").update({ status }).eq("id", id);
@@ -152,6 +175,10 @@
       const application = applications.find(item => String(item.id) === String(id));
       if (!application) return;
       const status = application.status || "new";
+      const existingStudent = studentForApplication(application.id);
+      const existingEnrollment = existingStudent
+        ? enrollments.find(item => item.student_id === existingStudent.id)
+        : null;
       drawer.dataset.id = String(id);
       detailChild.textContent = application.child_name;
       detailContent.innerHTML = `
@@ -165,7 +192,32 @@
         </div>
         <div class="detail"><small>Besked</small><div class="detail-message">${escapeHtml(application.message || "Ingen besked")}</div></div>
         <div class="field"><label for="drawerStatus">Status</label><select id="drawerStatus">${Object.entries(statusLabels).map(([value,label]) => `<option value="${value}" ${value === status ? "selected" : ""}>${label}</option>`).join("")}</select></div>
-        ${status === "accepted" ? `<button id="createStudentButton" class="button" type="button">Opret som elev</button><div id="studentStatus" class="status" role="status"></div>` : ""}
+        <section class="admission-box">
+          <span class="eyebrow">Optagelsesflow</span>
+          <h3>${existingStudent ? "Eleven er oprettet" : "Gør ansøgningen til en elev"}</h3>
+          <div class="admission-steps">
+            <span class="admission-step done">1. Ansøgning modtaget</span>
+            <span class="admission-step ${status === "accepted" || existingStudent ? "done" : ""}">2. Godkendt</span>
+            <span class="admission-step ${existingStudent ? "done" : ""}">3. Elev oprettet</span>
+            <span class="admission-step ${existingEnrollment ? "done" : ""}">4. Hold tilknyttet</span>
+          </div>
+          ${existingEnrollment ? `
+            <p class="muted">Eleven er tilknyttet <strong>${escapeHtml(classes.find(item => item.id === existingEnrollment.class_id)?.name || "et hold")}</strong>.</p>
+          ` : `
+            <div class="field">
+              <label for="admissionClassId">Hold (valgfrit)</label>
+              <select id="admissionClassId">
+                <option value="">Opret uden hold</option>
+                ${classOptions()}
+              </select>
+            </div>
+          `}
+          <div class="admission-actions">
+            ${existingEnrollment ? "" : `<button id="createStudentButton" class="button" type="button">${existingStudent ? "Tilknyt hold" : "Godkend og opret elev"}</button>`}
+            ${existingStudent ? '<a href="students.html">Åbn elevoversigten →</a>' : ""}
+          </div>
+          <div id="studentStatus" class="status" role="status"></div>
+        </section>
       `;
       drawerBackdrop.hidden = false;
       drawer.hidden = false;
@@ -177,10 +229,16 @@
     async function createStudent(application) {
       const button = document.getElementById("createStudentButton");
       const statusBox = document.getElementById("studentStatus");
+      const selectedClassId = document.getElementById("admissionClassId")?.value || "";
+      if (studentForApplication(application.id) && !selectedClassId) {
+        statusBox.textContent = "Vælg et hold, som eleven skal tilknyttes.";
+        statusBox.className = "status show error";
+        return;
+      }
       button.disabled = true;
       button.textContent = "Opretter…";
 
-      const { error } = await supabaseClient.from("students").upsert({
+      const { data:student,error } = await supabaseClient.from("students").upsert({
         application_id: application.id,
         full_name: application.child_name,
         age: application.child_age,
@@ -188,19 +246,45 @@
         parent_email: application.email,
         parent_phone: application.phone || null,
         status: "active"
-      }, { onConflict: "application_id" });
+      }, { onConflict: "application_id" }).select().single();
 
       if (error) {
-        statusBox.textContent = "Eleven kunne ikke oprettes. Kontrollér elevmodulets databaseopsætning.";
+        statusBox.textContent = "Eleven kunne ikke oprettes. Kontrollér oplysningerne og prøv igen.";
         statusBox.className = "status show error";
         button.disabled = false;
-        button.textContent = "Opret som elev";
+        button.textContent = "Godkend og opret elev";
         return;
       }
 
-      statusBox.textContent = "Eleven er oprettet og kan nu ses under Elever.";
+      if (selectedClassId) {
+        const { data:enrollment,error:enrollmentError } = await supabaseClient.from("class_enrollments").upsert({
+          class_id:selectedClassId,
+          student_id:student.id
+        },{onConflict:"class_id,student_id"}).select().single();
+        if (enrollmentError) {
+          statusBox.textContent = "Eleven er oprettet, men kunne ikke tilknyttes holdet.";
+          statusBox.className = "status show error";
+          button.disabled = false;
+          button.textContent = "Prøv hold igen";
+          if (!students.some(item => item.id === student.id)) students.push(student);
+          return;
+        }
+        if (!enrollments.some(item => item.id === enrollment.id)) enrollments.push(enrollment);
+      }
+
+      await supabaseClient.from("applications").update({status:"accepted"}).eq("id",application.id);
+      application.status = "accepted";
+      const studentIndex = students.findIndex(item => item.id === student.id);
+      if (studentIndex >= 0) students[studentIndex] = student;
+      else students.push(student);
+
+      statusBox.textContent = selectedClassId
+        ? "Eleven er oprettet og tilknyttet holdet."
+        : "Eleven er oprettet. Du kan tilknytte et hold senere.";
       statusBox.className = "status show success";
-      button.textContent = "Elev oprettet";
+      button.textContent = "Færdig";
+      renderApplications();
+      setTimeout(() => openApplication(application.id),900);
     }
 
     function closeApplication() {
@@ -210,12 +294,21 @@
     }
 
     async function loadApplications() {
-      const { data, error } = await supabaseClient.from("applications").select("*").order("created_at", { ascending:false });
+      const results = await Promise.all([
+        supabaseClient.from("applications").select("*").order("created_at",{ascending:false}),
+        supabaseClient.from("classes").select("id,name,status,capacity").order("name"),
+        supabaseClient.from("students").select("id,application_id,full_name"),
+        supabaseClient.from("class_enrollments").select("id,class_id,student_id")
+      ]);
+      const error = results.map(result => result.error).find(Boolean);
       if (error) {
         rows.innerHTML = '<tr><td colspan="6">Ansøgninger kunne ikke hentes. Kontrollér V3 SQL-opsætningen.</td></tr>';
         return;
       }
-      applications = data || [];
+      applications = results[0].data || [];
+      classes = results[1].data || [];
+      students = results[2].data || [];
+      enrollments = results[3].data || [];
       renderApplications();
     }
 
