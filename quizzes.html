@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Quizzer og læringstjek · Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .quiz-layout{display:grid;grid-template-columns:minmax(270px,.68fr) minmax(0,1.55fr);gap:16px}
+    .quiz-rail{align-self:start;position:sticky;top:24px}
+    .quiz-rail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+    .quiz-rail h2,.quiz-workspace h2{font-family:Georgia,serif;font-weight:500}
+    .quiz-list{display:grid;gap:9px;margin-top:16px}
+    .quiz-choice{display:grid;gap:7px;width:100%;padding:14px;border:1px solid var(--line);border-radius:14px;background:#fff;color:var(--ink);text-align:left;cursor:pointer}
+    .quiz-choice:hover,.quiz-choice.active{border-color:#88a697;background:#f3f7f4}
+    .quiz-choice-top,.quiz-meta,.quiz-actions,.question-head,.result-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .quiz-choice small{color:var(--muted)}
+    .status-pill{display:inline-flex;width:max-content;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:850}
+    .status-draft{background:#f0f1ef;color:#5d6661}.status-published{background:#e6f4ea;color:#26653a}.status-closed{background:#fde9e7;color:#91352d}
+    .student-picker{display:grid;gap:6px;margin:16px 0 0;color:var(--muted);font-size:12px;font-weight:750}
+    .student-picker select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:11px;background:#fff;color:var(--ink)}
+    .quiz-workspace{display:grid;gap:16px}.workspace-empty{padding:60px 24px;text-align:center}
+    .quiz-hero{position:relative;overflow:hidden;background:linear-gradient(135deg,#17372c,#2a5948);color:#fff;border:0;padding:28px}
+    .quiz-hero::after{content:"";position:absolute;width:240px;height:240px;right:-100px;top:-120px;border-radius:50%;background:rgba(255,255,255,.07)}
+    .quiz-hero .eyebrow,.quiz-hero .muted{color:#c3d6cd}.quiz-hero h2{font-size:clamp(32px,5vw,46px);line-height:1.06;margin:8px 0}
+    .quiz-meta{justify-content:flex-start;flex-wrap:wrap;margin:16px 0}.quiz-meta span{padding:7px 10px;border-radius:999px;background:rgba(255,255,255,.11);font-size:12px;font-weight:750}
+    .quiz-actions{justify-content:flex-start;flex-wrap:wrap;position:relative;z-index:1}.quiz-hero .button{background:#fff;color:#17372c}
+    .question-list,.editor-questions,.review-list{display:grid;gap:14px}
+    .question-card{display:grid;gap:14px}.question-card h3{font-family:Georgia,serif;font-size:24px;font-weight:500;margin:0}
+    .option-list{display:grid;gap:9px}.option{display:flex;gap:11px;align-items:flex-start;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}
+    .option:has(input:checked){border-color:#6f9783;background:#edf5f0}.option input{margin-top:4px;accent-color:var(--brand)}
+    .quiz-submit{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+    .score-ring{display:grid;place-items:center;width:94px;height:94px;border-radius:50%;background:conic-gradient(var(--brand) var(--score),var(--brand-soft) 0);position:relative}
+    .score-ring::after{content:"";position:absolute;inset:9px;border-radius:50%;background:#fff}.score-ring strong{position:relative;z-index:1;font-size:22px}
+    .review-item{display:grid;gap:9px;padding:16px;border:1px solid var(--line);border-radius:14px}
+    .review-item.correct{border-left:5px solid #2f7847}.review-item.wrong{border-left:5px solid #a94b42}
+    .review-answer{font-size:13px;color:var(--muted)}.explanation{padding:12px;border-radius:11px;background:var(--brand-soft);font-size:14px}
+    .quiz-form{display:grid;gap:18px}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    .form-grid label,.question-editor label{display:grid;gap:7px;font-size:13px;font-weight:750}.form-grid label.wide{grid-column:1/-1}
+    .form-grid input,.form-grid select,.form-grid textarea,.question-editor input,.question-editor select,.question-editor textarea{width:100%;padding:12px;border:1px solid #cbd4cf;border-radius:11px;background:#fff}
+    .question-editor{display:grid;gap:13px;padding:17px;border:1px solid var(--line);border-radius:15px;background:#f8faf9}
+    .question-head button{border:0;background:transparent;color:var(--danger);font-weight:750;cursor:pointer}
+    .answer-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .editor-footer{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+    .attempt-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 0;border-bottom:1px solid var(--line)}.attempt-row:last-child{border:0}
+    @media(max-width:1000px){.quiz-layout{grid-template-columns:1fr}.quiz-rail{position:static}.quiz-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:700px){.quiz-list,.form-grid,.answer-grid{grid-template-columns:1fr}.form-grid label.wide{grid-column:auto}.quiz-hero{padding:22px}.result-head{align-items:flex-start}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Henter quizzer og læringstjek…</div>
+
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="index.html">Substans</a>
+      <nav class="nav">
+        <a href="portal.html">Mit overblik</a>
+        <a href="lesson-room.html">Lektionsrum</a>
+        <a class="active" href="quizzes.html">Quizzer</a>
+        <a href="assignments.html">Afleveringer</a>
+        <a href="resources.html">Materialer og lektier</a>
+      </nav>
+      <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <span id="roleLabel" class="eyebrow">Forståelse frem for gæt</span>
+          <h1 class="title">Quizzer og læringstjek</h1>
+          <p id="pageIntro" class="muted">Små læringstjek gør det tydeligt, hvad der er forstået, og hvad næste skridt er.</p>
+        </div>
+        <button id="newQuizButton" class="button" type="button" hidden>Nyt læringstjek</button>
+      </header>
+
+      <section class="grid">
+        <article class="card stat"><span class="muted">I alt</span><strong id="totalCount">—</strong></article>
+        <article class="card stat"><span id="middleLabel" class="muted">Gennemført</span><strong id="middleCount">—</strong></article>
+        <article class="card stat"><span id="lastLabel" class="muted">Mangler</span><strong id="lastCount">—</strong></article>
+      </section>
+
+      <div class="quiz-layout" style="margin-top:16px">
+        <aside class="card quiz-rail">
+          <div class="quiz-rail-head">
+            <div><span class="eyebrow">Overblik</span><h2 style="font-size:28px;margin:5px 0">Læringstjek</h2></div>
+          </div>
+          <label id="studentPickerWrap" class="student-picker" hidden>Vis for
+            <select id="studentPicker"></select>
+          </label>
+          <div id="quizList" class="quiz-list"><p class="muted">Henter læringstjek…</p></div>
+        </aside>
+
+        <section id="quizWorkspace" class="quiz-workspace">
+          <article class="card workspace-empty">
+            <h2>Vælg et læringstjek</h2>
+            <p class="muted">Indholdet bliver vist her.</p>
+          </article>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    let authState;
+    let isStaff = false;
+    let classes = [];
+    let lessons = [];
+    let quizzes = [];
+    let questions = [];
+    let attempts = [];
+    let students = [];
+    let selectedQuizId = null;
+    let selectedStudentId = null;
+
+    const statusLabels = { draft:"Kladde", published:"Udgivet", closed:"Afsluttet" };
+    const optionLetters = ["a","b","c","d"];
+
+    function className(id) {
+      return classes.find(item => item.id === id)?.name || "Hold";
+    }
+
+    function formatDateTime(value) {
+      if (!value) return "Ingen frist";
+      return new Date(value).toLocaleString("da-DK",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
+    }
+
+    function isPastDue(quiz) {
+      return Boolean(quiz.due_at && new Date(quiz.due_at) < new Date());
+    }
+
+    function quizAttempt(quizId,studentId = selectedStudentId) {
+      return attempts.find(item => item.quiz_id === quizId && item.student_id === studentId);
+    }
+
+    function updateStats() {
+      totalCount.textContent = quizzes.length;
+      if (isStaff) {
+        middleCount.textContent = quizzes.filter(item => item.status === "published").length;
+        lastCount.textContent = attempts.length;
+        middleLabel.textContent = "Udgivet";
+        lastLabel.textContent = "Besvarelser";
+      } else {
+        const completed = quizzes.filter(item => quizAttempt(item.id)).length;
+        middleCount.textContent = completed;
+        lastCount.textContent = quizzes.filter(item => !quizAttempt(item.id) && item.status === "published" && !isPastDue(item)).length;
+      }
+    }
+
+    function renderQuizList() {
+      updateStats();
+      quizList.innerHTML = quizzes.length ? quizzes.map(quiz => {
+        const attempt = quizAttempt(quiz.id);
+        const questionCount = questions.filter(item => item.quiz_id === quiz.id).length;
+        const subtitle = isStaff
+          ? `${questionCount} spørgsmål · ${attempts.filter(item => item.quiz_id === quiz.id).length} besvarelser`
+          : (attempt ? `${attempt.score} af ${attempt.total} rigtige` : (isPastDue(quiz) ? "Fristen er udløbet" : formatDateTime(quiz.due_at)));
+        return `<button class="quiz-choice ${selectedQuizId === quiz.id ? "active" : ""}" type="button" data-quiz="${escapeHtml(quiz.id)}">
+          <span class="quiz-choice-top"><strong>${escapeHtml(quiz.title)}</strong><span class="status-pill status-${quiz.status}">${escapeHtml(attempt ? "Gennemført" : statusLabels[quiz.status])}</span></span>
+          <small>${escapeHtml(className(quiz.class_id))}</small>
+          <small>${escapeHtml(subtitle)}</small>
+        </button>`;
+      }).join("") : `<p class="muted">${isStaff ? "Opret det første læringstjek." : "Der er endnu ingen læringstjek."}</p>`;
+    }
+
+    function emptyWorkspace(title,text) {
+      quizWorkspace.innerHTML = `<article class="card workspace-empty"><h2>${escapeHtml(title)}</h2><p class="muted">${escapeHtml(text)}</p></article>`;
+    }
+
+    function renderReview(attempt) {
+      const review = Array.isArray(attempt.answer_review) ? attempt.answer_review : [];
+      const percentage = Math.round((attempt.score / attempt.total) * 100);
+      quizWorkspace.innerHTML = `<article class="card">
+        <div class="result-head">
+          <div>
+            <span class="eyebrow">Gennemført</span>
+            <h2 style="font-size:34px;margin:6px 0">Dit resultat</h2>
+            <p class="muted">Svarene er gemt. Brug forklaringerne til at forstå næste skridt.</p>
+          </div>
+          <div class="score-ring" style="--score:${percentage}%"><strong>${attempt.score}/${attempt.total}</strong></div>
+        </div>
+      </article>
+      <section class="review-list">${review.map(item => {
+        const selectedText = item.options?.[item.selected] || "Intet svar";
+        const correctText = item.options?.[item.correct] || "";
+        return `<article class="review-item ${item.is_correct ? "correct" : "wrong"}">
+          <span class="eyebrow">Spørgsmål ${escapeHtml(item.position)}</span>
+          <strong>${escapeHtml(item.prompt)}</strong>
+          <div class="review-answer">${item.is_correct ? "Rigtigt svar" : `Dit svar: ${escapeHtml(selectedText)} · Rigtigt svar: ${escapeHtml(correctText)}`}</div>
+          ${item.explanation ? `<div class="explanation">${escapeHtml(item.explanation)}</div>` : ""}
+        </article>`;
+      }).join("")}</section>`;
+    }
+
+    async function renderFamilyQuiz(quiz) {
+      const attempt = quizAttempt(quiz.id);
+      if (attempt) {
+        renderReview(attempt);
+        return;
+      }
+      if (quiz.status !== "published" || isPastDue(quiz)) {
+        emptyWorkspace("Læringstjekket er afsluttet","Der kan ikke længere afleveres en besvarelse.");
+        return;
+      }
+
+      quizWorkspace.innerHTML = '<article class="card workspace-empty">Henter spørgsmål…</article>';
+      const { data, error } = await supabaseClient.rpc("get_quiz_questions",{target_quiz_id:quiz.id});
+      if (error || !data?.length) {
+        emptyWorkspace("Kunne ikke hente spørgsmål","Prøv igen, eller kontakt underviseren.");
+        return;
+      }
+
+      quizWorkspace.innerHTML = `<article class="card quiz-hero">
+        <span class="eyebrow">${escapeHtml(className(quiz.class_id))}</span>
+        <h2>${escapeHtml(quiz.title)}</h2>
+        <p class="muted">${quiz.instructions ? escapeHtml(quiz.instructions) : "Læs hvert spørgsmål roligt, og vælg det svar, du mener er rigtigt."}</p>
+        <div class="quiz-meta"><span>${data.length} spørgsmål</span><span>${escapeHtml(formatDateTime(quiz.due_at))}</span></div>
+      </article>
+      <form id="attemptForm" class="question-list">
+        ${data.map((question,index) => `<article class="card question-card">
+          <span class="eyebrow">Spørgsmål ${index + 1} af ${data.length}</span>
+          <h3>${escapeHtml(question.prompt)}</h3>
+          <div class="option-list">${optionLetters.map(letter => `<label class="option">
+            <input type="radio" name="${escapeHtml(question.id)}" value="${letter}" required>
+            <span>${escapeHtml(question.options[letter])}</span>
+          </label>`).join("")}</div>
+        </article>`).join("")}
+        <article class="card quiz-submit">
+          <button id="submitAttemptButton" class="button" type="submit">Aflever svar</button>
+          <span id="attemptMessage" class="muted" role="status">Besvarelsen kan kun afleveres én gang.</span>
+        </article>
+      </form>`;
+
+      attemptForm.addEventListener("submit",async event => {
+        event.preventDefault();
+        const answerPayload = {};
+        data.forEach(question => {
+          answerPayload[question.id] = attemptForm.elements[question.id].value;
+        });
+        submitAttemptButton.disabled = true;
+        attemptMessage.textContent = "Retter dine svar…";
+        const { data:result,error:submitError } = await supabaseClient.rpc("submit_quiz_attempt",{
+          target_quiz_id:quiz.id,
+          target_student_id:selectedStudentId,
+          submitted_answers:answerPayload
+        });
+        if (submitError) {
+          attemptMessage.textContent = submitError.message || "Besvarelsen kunne ikke gemmes.";
+          submitAttemptButton.disabled = false;
+          return;
+        }
+        const row = result?.[0];
+        const savedAttempt = {
+          id:row.attempt_id,
+          quiz_id:quiz.id,
+          student_id:selectedStudentId,
+          score:row.result_score,
+          total:row.result_total,
+          answer_review:row.result_review,
+          submitted_at:new Date().toISOString()
+        };
+        attempts.push(savedAttempt);
+        renderQuizList();
+        renderReview(savedAttempt);
+      });
+    }
+
+    function questionEditor(question = {}) {
+      return `<div class="question-editor">
+        <div class="question-head"><span class="eyebrow">Spørgsmål <b class="question-number"></b></span><button type="button" data-remove-question>Fjern</button></div>
+        <label>Spørgsmål
+          <textarea data-field="prompt" rows="2" maxlength="1200" required placeholder="Hvad skal eleven tage stilling til?">${escapeHtml(question.prompt || "")}</textarea>
+        </label>
+        <div class="answer-grid">
+          ${optionLetters.map(letter => `<label>Svar ${letter.toUpperCase()}
+            <input data-field="option_${letter}" maxlength="500" required value="${escapeHtml(question[`option_${letter}`] || "")}">
+          </label>`).join("")}
+        </div>
+        <label>Rigtigt svar
+          <select data-field="correct_option">${optionLetters.map(letter => `<option value="${letter}"${question.correct_option === letter ? " selected" : ""}>Svar ${letter.toUpperCase()}</option>`).join("")}</select>
+        </label>
+        <label>Forklaring efter aflevering
+          <textarea data-field="explanation" rows="2" maxlength="1200" placeholder="Forklar kort, hvorfor svaret er rigtigt.">${escapeHtml(question.explanation || "")}</textarea>
+        </label>
+      </div>`;
+    }
+
+    function renumberQuestions() {
+      document.querySelectorAll(".question-editor").forEach((item,index) => {
+        item.querySelector(".question-number").textContent = index + 1;
+        item.querySelector("[data-remove-question]").hidden = document.querySelectorAll(".question-editor").length === 1;
+      });
+    }
+
+    function updateLessonOptions(selectedId = "") {
+      const classId = document.getElementById("quizClass").value;
+      const options = lessons.filter(item => item.class_id === classId);
+      quizLesson.innerHTML = '<option value="">Ikke knyttet til en bestemt lektion</option>' + options.map(item =>
+        `<option value="${escapeHtml(item.id)}"${item.id === selectedId ? " selected" : ""}>${escapeHtml(item.title)} · ${escapeHtml(new Date(item.event_date+"T12:00:00").toLocaleDateString("da-DK"))}</option>`
+      ).join("");
+    }
+
+    function renderStaffEditor(quiz = null) {
+      const quizQuestions = quiz
+        ? questions.filter(item => item.quiz_id === quiz.id).sort((a,b) => a.position - b.position)
+        : [{}];
+      const quizAttempts = quiz ? attempts.filter(item => item.quiz_id === quiz.id) : [];
+      const dueValue = quiz?.due_at ? new Date(new Date(quiz.due_at).getTime() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,16) : "";
+
+      quizWorkspace.innerHTML = `<form id="quizEditor" class="card quiz-form">
+        <div>
+          <span class="eyebrow">${quiz ? "Redigér læringstjek" : "Nyt læringstjek"}</span>
+          <h2 style="font-size:34px;margin:6px 0">${quiz ? escapeHtml(quiz.title) : "Skab et kort læringstjek"}</h2>
+          <p class="muted">Skriv tydelige spørgsmål, og udgiv først, når læringstjekket er klar.</p>
+        </div>
+        <div class="form-grid">
+          <label>Hold
+            <select id="quizClass" required>${classes.map(item => `<option value="${escapeHtml(item.id)}"${item.id === quiz?.class_id ? " selected" : ""}>${escapeHtml(item.name)}</option>`).join("")}</select>
+          </label>
+          <label>Status
+            <select id="quizStatus">
+              <option value="draft"${!quiz || quiz.status === "draft" ? " selected" : ""}>Kladde</option>
+              <option value="published"${quiz?.status === "published" ? " selected" : ""}>Udgivet til holdet</option>
+              <option value="closed"${quiz?.status === "closed" ? " selected" : ""}>Afsluttet</option>
+            </select>
+          </label>
+          <label class="wide">Titel
+            <input id="quizTitle" maxlength="160" required value="${escapeHtml(quiz?.title || "")}" placeholder="Fx Hvad lærte vi om bønnen?">
+          </label>
+          <label>Lektion
+            <select id="quizLesson"></select>
+          </label>
+          <label>Frist
+            <input id="quizDue" type="datetime-local" value="${escapeHtml(dueValue)}">
+          </label>
+          <label class="wide">Introduktion
+            <textarea id="quizInstructions" rows="3" maxlength="2000" placeholder="Fortæl kort, hvad eleven skal fokusere på.">${escapeHtml(quiz?.instructions || "")}</textarea>
+          </label>
+        </div>
+        <div>
+          <div class="question-head"><div><span class="eyebrow">Indhold</span><h2 style="font-size:27px;margin:4px 0">Spørgsmål</h2></div><button id="addQuestionButton" class="button secondary" type="button">Tilføj spørgsmål</button></div>
+          <div id="editorQuestions" class="editor-questions">${quizQuestions.map(questionEditor).join("")}</div>
+        </div>
+        <div class="editor-footer">
+          <div class="quiz-actions"><button id="saveQuizButton" class="button" type="submit">Gem læringstjek</button><span id="saveQuizMessage" class="muted" role="status"></span></div>
+          ${quiz ? `<span class="muted">${quizAttempts.length} besvarelse${quizAttempts.length === 1 ? "" : "r"}</span>` : ""}
+        </div>
+      </form>
+      ${quiz ? `<article class="card">
+        <span class="eyebrow">Resultater</span>
+        <h2 style="font-size:27px;margin:5px 0">Seneste besvarelser</h2>
+        <div>${quizAttempts.length ? quizAttempts.map(attempt => {
+          const student = students.find(item => item.id === attempt.student_id);
+          return `<div class="attempt-row"><span><strong>${escapeHtml(student?.full_name || "Elev")}</strong><small class="muted" style="display:block">${escapeHtml(formatDateTime(attempt.submitted_at))}</small></span><span class="badge">${attempt.score} / ${attempt.total}</span></div>`;
+        }).join("") : '<p class="muted">Der er endnu ingen besvarelser.</p>'}</div>
+      </article>` : ""}`;
+
+      updateLessonOptions(quiz?.calendar_event_id || "");
+      renumberQuestions();
+      quizClass.addEventListener("change",() => updateLessonOptions());
+      addQuestionButton.addEventListener("click",() => {
+        editorQuestions.insertAdjacentHTML("beforeend",questionEditor());
+        renumberQuestions();
+      });
+      editorQuestions.addEventListener("click",event => {
+        const removeButton = event.target.closest("[data-remove-question]");
+        if (!removeButton || document.querySelectorAll(".question-editor").length === 1) return;
+        removeButton.closest(".question-editor").remove();
+        renumberQuestions();
+      });
+      quizEditor.addEventListener("submit",saveQuiz);
+    }
+
+    async function saveQuiz(event) {
+      event.preventDefault();
+      const questionPayload = [...document.querySelectorAll(".question-editor")].map((item,index) => ({
+        position:index + 1,
+        prompt:item.querySelector('[data-field="prompt"]').value.trim(),
+        option_a:item.querySelector('[data-field="option_a"]').value.trim(),
+        option_b:item.querySelector('[data-field="option_b"]').value.trim(),
+        option_c:item.querySelector('[data-field="option_c"]').value.trim(),
+        option_d:item.querySelector('[data-field="option_d"]').value.trim(),
+        correct_option:item.querySelector('[data-field="correct_option"]').value,
+        explanation:item.querySelector('[data-field="explanation"]').value.trim()
+      }));
+      saveQuizButton.disabled = true;
+      saveQuizMessage.textContent = "Gemmer…";
+      const { data,error } = await supabaseClient.rpc("save_quiz",{
+        target_quiz_id:selectedQuizId,
+        target_class_id:quizClass.value,
+        target_calendar_event_id:quizLesson.value || null,
+        target_title:quizTitle.value.trim(),
+        target_instructions:quizInstructions.value.trim() || null,
+        target_status:quizStatus.value,
+        target_due_at:quizDue.value ? new Date(quizDue.value).toISOString() : null,
+        target_questions:questionPayload
+      });
+      if (error) {
+        saveQuizMessage.textContent = error.message || "Læringstjekket kunne ikke gemmes.";
+        saveQuizButton.disabled = false;
+        return;
+      }
+      selectedQuizId = data;
+      saveQuizMessage.textContent = "Læringstjekket er gemt.";
+      await loadData(selectedQuizId);
+    }
+
+    async function openQuiz(quizId) {
+      selectedQuizId = quizId;
+      renderQuizList();
+      const quiz = quizzes.find(item => item.id === quizId);
+      if (!quiz) {
+        emptyWorkspace("Vælg et læringstjek","Indholdet bliver vist her.");
+        return;
+      }
+      if (isStaff) renderStaffEditor(quiz);
+      else await renderFamilyQuiz(quiz);
+    }
+
+    async function loadData(keepQuizId = null) {
+      const requests = [
+        supabaseClient.from("classes").select("id,name").order("name"),
+        supabaseClient.from("calendar_events").select("id,class_id,title,event_date").eq("event_type","lesson").order("event_date",{ascending:false}),
+        supabaseClient.from("quizzes").select("*").order("created_at",{ascending:false}),
+        supabaseClient.from("quiz_attempts").select("*").order("submitted_at",{ascending:false}),
+        supabaseClient.from("students").select("id,full_name").order("full_name")
+      ];
+      if (isStaff) requests.push(supabaseClient.from("quiz_questions").select("*").order("position"));
+      const results = await Promise.all(requests);
+      const error = results.find(result => result.error)?.error;
+      if (error) {
+        emptyWorkspace("Quizmodulet mangler databaseopsætning","Kør quiz-setup.sql i Supabase, og genindlæs siden.");
+        return;
+      }
+      classes = results[0].data || [];
+      lessons = results[1].data || [];
+      quizzes = results[2].data || [];
+      attempts = results[3].data || [];
+      students = results[4].data || [];
+      questions = isStaff ? (results[5].data || []) : [];
+
+      if (!isStaff) {
+        selectedStudentId = selectedStudentId || students[0]?.id || null;
+        studentPicker.innerHTML = students.map(item => `<option value="${escapeHtml(item.id)}"${item.id === selectedStudentId ? " selected" : ""}>${escapeHtml(item.full_name)}</option>`).join("");
+        studentPickerWrap.hidden = students.length < 2;
+      }
+
+      selectedQuizId = keepQuizId && quizzes.some(item => item.id === keepQuizId)
+        ? keepQuizId
+        : (selectedQuizId && quizzes.some(item => item.id === selectedQuizId) ? selectedQuizId : quizzes[0]?.id || null);
+      renderQuizList();
+      if (selectedQuizId) await openQuiz(selectedQuizId);
+      else if (isStaff) renderStaffEditor();
+      else emptyWorkspace("Ingen læringstjek endnu","Underviseren har ikke udgivet et læringstjek til holdet.");
+    }
+
+    quizList.addEventListener("click",event => {
+      const button = event.target.closest("button[data-quiz]");
+      if (button) openQuiz(button.dataset.quiz);
+    });
+    newQuizButton.addEventListener("click",() => {
+      selectedQuizId = null;
+      renderQuizList();
+      renderStaffEditor();
+    });
+    studentPicker.addEventListener("change",async () => {
+      selectedStudentId = studentPicker.value;
+      renderQuizList();
+      if (selectedQuizId) await openQuiz(selectedQuizId);
+    });
+
+    (async () => {
+      authState = await requireRole(["student","parent","teacher","admin"]);
+      if (!authState) return;
+      isStaff = ["teacher","admin"].includes(authState.profile.role);
+      if (isStaff) {
+        roleLabel.textContent = authState.profile.role === "teacher" ? "Mit lærerbord" : "Administration";
+        pageIntro.textContent = "Opret korte læringstjek, udgiv dem til holdet og se elevernes forståelse.";
+        newQuizButton.hidden = false;
+      }
+      loading.remove();
+      app.hidden = false;
+      await loadData();
+    })();
+  </script>
+</body>
+</html>
