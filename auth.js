@@ -181,19 +181,17 @@ function setupCampusNavigation(role = null) {
     {
       label: "Barnets læring",
       links: [
-        ["lesson-room.html", "Lektionsrum"],
         ["curriculum.html", "Undervisningsplan"],
         ["portal.html#learning", "Materialer og lektier"],
-        ["quizzes.html", "Quizzer"],
-        ["assignments.html", "Afleveringer"],
+        ["quizzes.html", "Quizresultater"],
+        ["assignments.html", "Afleveringsstatus"],
         ["certificates.html", "Certifikater"]
       ]
     },
     {
       label: "Opfølgning",
       links: [
-        ["portal.html#feedback", "Feedback"],
-        ["portal.html#progress", "Udvikling"],
+        ["portal.html#feedback", "Feedback og udvikling"],
         ["portal.html#messages", "Beskeder"],
         ["portal.html#calendar", "Kalender"],
         ["portal.html#payments", "Betalinger"]

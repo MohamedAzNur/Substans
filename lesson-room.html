@@ -117,6 +117,7 @@
   <script>
     let authState;
     let isStaff = false;
+    let isParent = false;
     let classes = [];
     let events = [];
     let rooms = [];
@@ -179,7 +180,7 @@
             <span>${escapeHtml(className(event.class_id))}</span>
           </div>
           <div class="room-actions">
-            ${event.meeting_url ? `<a class="button" href="${escapeHtml(event.meeting_url)}" target="_blank" rel="noopener">Deltag i undervisningen</a>` : (isStaff ? '<a class="button" href="calendar.html">Tilføj mødelink</a>' : '<span class="muted">Mødelink kommer snart</span>')}
+            ${event.meeting_url && !isParent ? `<a class="button" href="${escapeHtml(event.meeting_url)}" target="_blank" rel="noopener">Deltag i undervisningen</a>` : (isStaff ? '<a class="button" href="calendar.html">Tilføj mødelink</a>' : (isParent ? '<span class="muted">Barnet deltager fra sin egen konto</span>' : '<span class="muted">Mødelink kommer snart</span>'))}
             ${room?.recording_url ? `<a class="button secondary" href="${escapeHtml(room.recording_url)}" target="_blank" rel="noopener">Se optagelse</a>` : ""}
           </div>
         </article>
@@ -215,7 +216,7 @@
             <span class="room-actions">
               ${resourceUrls[index] ? `<a class="button secondary" href="${escapeHtml(resourceUrls[index])}" target="_blank" rel="noopener">Åbn fil</a>` : ""}
               ${item.resource_url ? `<a class="button secondary" href="${escapeHtml(item.resource_url)}" target="_blank" rel="noopener">Åbn link</a>` : ""}
-              ${item.kind === "homework" ? '<a class="button secondary" href="assignments.html">Aflever</a>' : ""}
+              ${item.kind === "homework" ? `<a class="button secondary" href="assignments.html">${isParent ? "Se afleveringsstatus" : "Aflever"}</a>` : ""}
             </span>
           </div>`).join("") : '<p class="muted">Der er endnu ikke knyttet materialer til holdet.</p>'}</div>
         </article>
@@ -295,6 +296,7 @@
       authState = await requireRole(["student","parent","teacher","admin"]);
       if (!authState) return;
       isStaff = ["teacher","admin"].includes(authState.profile.role);
+      isParent = authState.profile.role === "parent";
       if (isStaff) {
         roleLabel.textContent = authState.profile.role === "teacher" ? "Mit lærerbord" : "Administration";
         calendarLink.hidden = false;

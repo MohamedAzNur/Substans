@@ -23,6 +23,21 @@ create table if not exists public.homework_submissions (
 
 alter table public.homework_submissions enable row level security;
 
+create or replace function public.is_own_student_profile(target_student_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.students student
+    where student.id = target_student_id
+      and student.student_profile_id = auth.uid()
+  );
+$$;
+
 create or replace function public.can_submit_homework(
   target_homework_id uuid,
   target_student_id uuid
@@ -34,7 +49,7 @@ security definer
 set search_path = public
 as $$
   select
-    target_student_id in (select public.current_student_ids())
+    public.is_own_student_profile(target_student_id)
     and exists (
       select 1
       from public.learning_items item
@@ -86,7 +101,7 @@ drop policy if exists "Families update own homework submissions" on public.homew
 create policy "Families update own homework submissions"
 on public.homework_submissions
 for update to authenticated
-using (student_id in (select public.current_student_ids()))
+using (public.is_own_student_profile(student_id))
 with check (
   public.can_submit_homework(learning_item_id, student_id)
   and submitted_by = auth.uid()
@@ -125,7 +140,7 @@ on storage.objects
 for insert to authenticated
 with check (
   bucket_id = 'homework-submissions'
-  and ((storage.foldername(name))[1])::uuid in (select public.current_student_ids())
+  and public.is_own_student_profile(((storage.foldername(name))[1])::uuid)
 );
 
 drop policy if exists "Members delete homework submission files" on storage.objects;
@@ -135,7 +150,7 @@ for delete to authenticated
 using (
   bucket_id = 'homework-submissions'
   and (
-    ((storage.foldername(name))[1])::uuid in (select public.current_student_ids())
+    public.is_own_student_profile(((storage.foldername(name))[1])::uuid)
     or public.teacher_can_access_student(((storage.foldername(name))[1])::uuid)
   )
 );

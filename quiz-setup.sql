@@ -272,6 +272,12 @@ as $$
   from public.quiz_questions question
   join public.quizzes quiz on quiz.id = question.quiz_id
   where question.quiz_id = target_quiz_id
+    and exists (
+      select 1
+      from public.profiles profile
+      where profile.id = auth.uid()
+        and profile.role = 'student'
+    )
     and public.can_access_quiz(quiz.id)
     and (
       quiz.status = 'published'
@@ -302,6 +308,15 @@ declare
   calculated_review jsonb;
   created_attempt_id uuid;
 begin
+  if not exists (
+    select 1
+    from public.profiles profile
+    where profile.id = auth.uid()
+      and profile.role = 'student'
+  ) then
+    raise exception 'Kun eleven kan aflevere quizzen.';
+  end if;
+
   select * into selected_quiz
   from public.quizzes
   where id = target_quiz_id;
@@ -317,8 +332,13 @@ begin
     raise exception 'Fristen er udløbet.';
   end if;
 
-  if target_student_id not in (select public.current_student_ids()) then
-    raise exception 'Eleven er ikke knyttet til denne bruger.';
+  if not exists (
+    select 1
+    from public.students student
+    where student.id = target_student_id
+      and student.student_profile_id = auth.uid()
+  ) then
+    raise exception 'Quizzen skal besvares fra elevens egen konto.';
   end if;
 
   if not exists (

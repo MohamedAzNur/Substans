@@ -107,6 +107,7 @@
     let tasks = [];
     let activeFilter = "all";
     let isStaff = false;
+    let isParent = false;
 
     const statusLabels = {
       missing: "Ikke afleveret",
@@ -182,7 +183,7 @@
       const fileUrls = await Promise.all(visible.map(task => signedSubmissionUrl(task.submission?.file_path)));
       assignmentList.innerHTML = visible.length ? visible.map((task,index) => isStaff
         ? staffCard(task,fileUrls[index])
-        : familyCard(task,fileUrls[index])
+        : (isParent ? parentCard(task,fileUrls[index]) : studentCard(task,fileUrls[index]))
       ).join("") : '<article class="card empty">Der er ingen afleveringer i denne visning.</article>';
     }
 
@@ -215,7 +216,7 @@
       </div>`;
     }
 
-    function familyCard(task,fileUrl) {
+    function studentCard(task,fileUrl) {
       const submission = task.submission;
       const approved = submission?.status === "approved";
       const inputId = `file-${task.homework.id}-${task.student.id}`;
@@ -236,6 +237,17 @@
             <span class="compact-note" role="status"></span>
           </div>
         </form>
+      </article>`;
+    }
+
+    function parentCard(task,fileUrl) {
+      const submission = task.submission;
+      return `<article class="card assignment-card">
+        ${cardHeader(task)}
+        ${task.homework.description ? `<p class="muted">${escapeHtml(task.homework.description)}</p>` : ""}
+        ${submission
+          ? existingSubmission(task,fileUrl)
+          : '<div class="submission-box"><b>Afventer barnets aflevering</b><span class="muted">Barnet afleverer fra sin egen konto. Status og feedback bliver vist her.</span></div>'}
       </article>`;
     }
 
@@ -314,6 +326,7 @@
 
     assignmentList.addEventListener("submit", async event => {
       event.preventDefault();
+      if (isParent) return;
       const form = event.target;
       const button = form.querySelector('button[type="submit"]');
       const statusText = form.querySelector('[role="status"]');
@@ -401,6 +414,7 @@
       authState = await requireRole(["student","parent","teacher","admin"]);
       if (!authState) return;
       isStaff = ["teacher","admin"].includes(authState.profile.role);
+      isParent = authState.profile.role === "parent";
       if (isStaff) {
         roleLabel.textContent = authState.profile.role === "teacher" ? "Underviser" : "Administration";
         pageTitle.textContent = "Lektier og afleveringer";
@@ -409,6 +423,11 @@
         attentionLabel.textContent = "Til gennemgang";
         createHomeworkLink.hidden = false;
         staffFilters.hidden = false;
+      } else if (isParent) {
+        roleLabel.textContent = "Følg barnets læring";
+        pageTitle.textContent = "Barnets afleveringer";
+        pageIntro.textContent = "Se lektier, afleveringsstatus og underviserens tilbagemeldinger. Barnet afleverer fra sin egen konto.";
+        attentionLabel.textContent = "Mangler";
       }
       loading.remove();
       app.hidden = false;
