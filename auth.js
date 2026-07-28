@@ -79,7 +79,8 @@ function setupCampusNavigation(role = null) {
       label: "Administration",
       links: [
         ["payments.html", "Betalinger"],
-        ["accounts.html", "Kontoadgang"]
+        ["accounts.html", "Kontoadgang"],
+        ["profile.html", "Min profil"]
       ]
     }
   ];
@@ -113,6 +114,12 @@ function setupCampusNavigation(role = null) {
         ["feedback.html", "Feedback"],
         ["messages.html", "Beskeder"]
       ]
+    },
+    {
+      label: "Konto",
+      links: [
+        ["profile.html", "Min profil"]
+      ]
     }
   ];
 
@@ -140,7 +147,7 @@ function setupCampusNavigation(role = null) {
     },
     {
       label: "Administration",
-      links: existingLinks.filter(([href]) => ["#payments", "admin.html"].includes(href))
+      links: existingLinks.filter(([href]) => ["#payments", "admin.html", "profile.html"].includes(href))
     }
   ].filter(section => section.links.length);
 

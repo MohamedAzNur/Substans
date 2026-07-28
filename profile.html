@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Min profil · Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .settings-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,.62fr);gap:18px;align-items:start}
+    .settings-stack{display:grid;gap:16px}
+    .settings-card h2{font-family:Georgia,serif;font-size:27px;font-weight:500;margin:4px 0 8px}
+    .settings-card input{width:100%;padding:13px 14px;border:1px solid #cbd4cf;border-radius:11px;background:#fff}
+    .settings-card input[readonly]{background:#f5f7f5;color:var(--muted)}
+    .identity{display:flex;gap:16px;align-items:center}
+    .avatar{width:62px;height:62px;display:grid;place-items:center;border-radius:20px;background:var(--brand);color:#fff;font-family:Georgia,serif;font-size:27px}
+    .identity h2{margin:0;font-size:25px}.identity p{margin:3px 0 0}
+    .detail-list{display:grid;gap:0;margin-top:18px}.detail-row{display:flex;justify-content:space-between;gap:18px;padding:13px 0;border-bottom:1px solid var(--line)}
+    .detail-row:last-child{border-bottom:0}.detail-row span{color:var(--muted)}.detail-row strong{text-align:right}
+    .security-action{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px 0;border-bottom:1px solid var(--line)}
+    .security-action:last-child{border-bottom:0}.security-action h3{font-size:16px;margin:0 0 3px}.security-action p{font-size:13px;margin:0;color:var(--muted)}
+    .security-action .button{white-space:nowrap}
+    .privacy-note{padding:16px;border-radius:14px;background:var(--brand-soft);color:var(--brand);font-size:13px}
+    @media(max-width:900px){.settings-grid{grid-template-columns:1fr}}
+    @media(max-width:620px){.security-action{align-items:flex-start;flex-direction:column}.security-action .button{width:100%}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Åbner din profil…</div>
+
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="index.html">Substans</a>
+      <nav class="nav">
+        <a href="portal.html">Mit overblik</a>
+        <a href="notifications.html">Notifikationer</a>
+        <a class="active" href="profile.html">Min profil</a>
+      </nav>
+      <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <span class="eyebrow">Konto</span>
+          <h1 class="title">Min profil</h1>
+          <p class="muted">Dine personlige oplysninger og sikkerhedsindstillinger.</p>
+        </div>
+        <span id="roleBadge" class="badge">Bruger</span>
+      </header>
+
+      <section class="settings-grid">
+        <div class="settings-stack">
+          <form id="profileForm" class="card settings-card">
+            <span class="eyebrow">Personlige oplysninger</span>
+            <h2>Sådan møder vi dig</h2>
+            <p class="muted">Navnet bruges i Campus og i kommunikationen fra Substans.</p>
+            <div class="field">
+              <label for="fullName">Fulde navn</label>
+              <input id="fullName" maxlength="80" autocomplete="name" required>
+            </div>
+            <div class="field">
+              <label for="email">E-mail</label>
+              <input id="email" type="email" readonly>
+            </div>
+            <button id="saveButton" class="button" type="submit">Gem navn</button>
+            <div id="profileStatus" class="status" role="status"></div>
+          </form>
+
+          <article class="card settings-card">
+            <span class="eyebrow">Sikkerhed</span>
+            <h2>Beskyt din konto</h2>
+            <div class="security-action">
+              <div><h3>Skift adgangskode</h3><p>Vi sender et sikkert, tidsbegrænset link til din e-mail.</p></div>
+              <button id="passwordButton" class="button secondary" type="button">Send nyt link</button>
+            </div>
+            <div class="security-action">
+              <div><h3>Log ud på andre enheder</h3><p>Behold denne session, og afslut øvrige aktive logins.</p></div>
+              <button id="sessionsButton" class="button secondary" type="button">Log andre ud</button>
+            </div>
+            <div id="securityStatus" class="status" role="status"></div>
+          </article>
+        </div>
+
+        <aside class="settings-stack">
+          <article class="card">
+            <div class="identity">
+              <div id="avatar" class="avatar">S</div>
+              <div><h2 id="displayName">Substans-bruger</h2><p id="displayEmail" class="muted"></p></div>
+            </div>
+            <div class="detail-list">
+              <div class="detail-row"><span>Rolle</span><strong id="roleText">—</strong></div>
+              <div class="detail-row"><span>Konto oprettet</span><strong id="createdText">—</strong></div>
+              <div class="detail-row"><span>Status</span><strong>Aktiv</strong></div>
+            </div>
+          </article>
+          <div class="privacy-note"><strong>Privatliv først.</strong><br>Dine oplysninger vises kun for relevante brugere og behandles efter deres rolle i Substans.</div>
+        </aside>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    let authState;
+    const roleLabels = {admin:"Administrator",teacher:"Underviser",parent:"Forælder",student:"Elev"};
+
+    function show(target,message,type) {
+      target.textContent = message;
+      target.className = `status show ${type}`;
+    }
+
+    function applyProfile(profile) {
+      const name = profile.full_name || "Substans-bruger";
+      fullName.value = name;
+      email.value = profile.email || authState.session.user.email || "";
+      displayName.textContent = name;
+      displayEmail.textContent = email.value;
+      avatar.textContent = name.trim().charAt(0).toUpperCase() || "S";
+      const role = roleLabels[profile.role] || "Bruger";
+      roleBadge.textContent = role;
+      roleText.textContent = role;
+      createdText.textContent = new Date(authState.session.user.created_at).toLocaleDateString("da-DK",{day:"numeric",month:"long",year:"numeric"});
+    }
+
+    profileForm.addEventListener("submit",async event => {
+      event.preventDefault();
+      saveButton.disabled = true;
+      saveButton.textContent = "Gemmer…";
+      const { data,error } = await supabaseClient.rpc("update_my_profile",{new_full_name:fullName.value});
+      if (error) {
+        show(profileStatus,"Navnet kunne ikke gemmes. Brug mellem 2 og 80 tegn.","error");
+      } else {
+        const updated = Array.isArray(data) ? data[0] : data;
+        authState.profile = updated || {...authState.profile,full_name:fullName.value.trim()};
+        applyProfile(authState.profile);
+        show(profileStatus,"Dit navn er opdateret.","success");
+      }
+      saveButton.disabled = false;
+      saveButton.textContent = "Gem navn";
+    });
+
+    passwordButton.addEventListener("click",async () => {
+      passwordButton.disabled = true;
+      passwordButton.textContent = "Sender…";
+      const redirectTo = new URL("reset-password.html",window.location.href).href;
+      const { error } = await supabaseClient.auth.resetPasswordForEmail(email.value,{redirectTo});
+      show(securityStatus,error ? "Linket kunne ikke sendes. Prøv igen senere." : "Tjek din e-mail. Linket er sendt og er tidsbegrænset.",error ? "error" : "success");
+      passwordButton.disabled = false;
+      passwordButton.textContent = "Send nyt link";
+    });
+
+    sessionsButton.addEventListener("click",async () => {
+      sessionsButton.disabled = true;
+      sessionsButton.textContent = "Logger ud…";
+      const { error } = await supabaseClient.auth.signOut({scope:"others"});
+      show(securityStatus,error ? "Andre sessioner kunne ikke afsluttes." : "Du er nu logget ud på andre enheder.",error ? "error" : "success");
+      sessionsButton.disabled = false;
+      sessionsButton.textContent = "Log andre ud";
+    });
+
+    (async () => {
+      authState = await requireRole(["admin","teacher","parent","student"]);
+      if (!authState) return;
+      applyProfile(authState.profile);
+      loading.hidden = true;
+      app.hidden = false;
+    })();
+  </script>
+</body>
+</html>
