@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Afventer godkendelse — Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .pending-card{width:min(620px,100%);text-align:center}
+    .pending-mark{display:grid;place-items:center;width:64px;height:64px;margin:0 auto 20px;border-radius:20px;background:var(--brand-soft);color:var(--brand);font-size:28px;font-weight:850}
+    .pending-card h1{font-family:Georgia,serif;font-size:clamp(34px,7vw,48px);font-weight:500;letter-spacing:-.035em;margin:8px 0}
+    .pending-steps{display:grid;gap:10px;margin:24px 0;text-align:left}
+    .pending-step{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;align-items:start;padding:13px;border:1px solid var(--line);border-radius:13px;background:#fff}
+    .pending-step b:first-child{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:var(--brand-soft);color:var(--brand)}
+    .pending-step span{display:block;color:var(--muted);font-size:14px}
+    .pending-actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
+  </style>
+</head>
+<body class="auth-page">
+  <main id="pendingCard" class="auth-card pending-card" hidden>
+    <div class="pending-mark">✓</div>
+    <span class="eyebrow">Konto modtaget</span>
+    <h1>Din adgang afventer godkendelse</h1>
+    <p class="muted">Din e-mail er bekræftet. Substans skal nu koble kontoen til den rigtige elev, forælder eller underviser.</p>
+    <div class="pending-steps">
+      <div class="pending-step"><b>1</b><div><strong>Vi gennemgår kontoen</strong><span>En administrator kontrollerer den ønskede rolle og tilknytning.</span></div></div>
+      <div class="pending-step"><b>2</b><div><strong>Adgangen bliver åbnet</strong><span>Næste gang du logger ind, kommer du automatisk til den rigtige visning.</span></div></div>
+    </div>
+    <p id="accountEmail" class="muted"></p>
+    <div class="pending-actions">
+      <a class="button secondary" href="index.html">Til forsiden</a>
+      <button class="button" type="button" onclick="signOut()">Log ud</button>
+    </div>
+  </main>
+
+  <div id="loading" class="loading">Kontrollerer din adgang…</div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    (async () => {
+      const { session, profile } = await getSessionProfile();
+      if (!session) {
+        window.location.replace("login.html");
+        return;
+      }
+      if (profile?.role !== "pending") {
+        window.location.replace(homeForRole(profile?.role));
+        return;
+      }
+      accountEmail.textContent = session.user.email || "";
+      loading.remove();
+      pendingCard.hidden = false;
+    })();
+  </script>
+</body>
+</html>

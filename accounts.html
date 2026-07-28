@@ -39,6 +39,7 @@
         <a href="feedback.html">Feedback</a>
         <a href="messages.html">Beskeder</a>
         <a href="payments.html">Betalinger</a>
+        <a href="calendar.html">Kalender</a>
         <a class="active" href="accounts.html">Kontoadgang</a>
       </nav>
       <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
@@ -80,7 +81,7 @@
   <script src="supabase-config.js"></script>
   <script src="auth.js"></script>
   <script>
-    const roleLabels = { student:"Elev", parent:"Forælder", teacher:"Underviser", admin:"Administrator" };
+    const roleLabels = { pending:"Afventer godkendelse", student:"Elev", parent:"Forælder", teacher:"Underviser", admin:"Administrator" };
     let profiles = [];
     let students = [];
     let teachers = [];
@@ -117,6 +118,7 @@
           <div class="account-name">
             <h2>${escapeHtml(profile.full_name || "Unavngiven konto")}</h2>
             <p class="muted">${escapeHtml(profile.email || "Ingen e-mail")}</p>
+            ${profile.role === "pending" ? '<span class="badge">Afventer godkendelse</span>' : ""}
             ${profile.requested_role && !link ? `<span class="badge">Ønsker: ${escapeHtml(roleLabels[profile.requested_role])}</span>` : ""}
           </div>
           <div class="compact-field">

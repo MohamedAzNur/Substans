@@ -181,7 +181,7 @@
           </div>
           <div class="room-actions">
             ${event.meeting_url && !isParent ? `<a class="button" href="${escapeHtml(event.meeting_url)}" target="_blank" rel="noopener">Deltag i undervisningen</a>` : (isStaff ? '<a class="button" href="calendar.html">Tilføj mødelink</a>' : (isParent ? '<span class="muted">Barnet deltager fra sin egen konto</span>' : '<span class="muted">Mødelink kommer snart</span>'))}
-            ${room?.recording_url ? `<a class="button secondary" href="${escapeHtml(room.recording_url)}" target="_blank" rel="noopener">Se optagelse</a>` : ""}
+            ${room?.recording_url && !isParent ? `<a class="button secondary" href="${escapeHtml(room.recording_url)}" target="_blank" rel="noopener">Se optagelse</a>` : ""}
           </div>
         </article>
 

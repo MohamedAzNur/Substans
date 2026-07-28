@@ -5,12 +5,15 @@ create table if not exists public.profiles (
   full_name text,
   email text,
   requested_role text check (requested_role in ('student','parent','teacher')),
-  role text not null default 'student' check (role in ('student','parent','teacher','admin')),
+  role text not null default 'pending' check (role in ('pending','student','parent','teacher','admin')),
   created_at timestamptz not null default now()
 );
 
 alter table public.profiles add column if not exists email text;
 alter table public.profiles add column if not exists requested_role text check (requested_role in ('student','parent','teacher'));
+alter table public.profiles drop constraint if exists profiles_role_check;
+alter table public.profiles add constraint profiles_role_check check (role in ('pending','student','parent','teacher','admin'));
+alter table public.profiles alter column role set default 'pending';
 alter table public.profiles enable row level security;
 
 create or replace function public.handle_new_user()
@@ -23,7 +26,7 @@ begin
     coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
     new.email,
     case when new.raw_user_meta_data->>'requested_role' in ('student','parent','teacher') then new.raw_user_meta_data->>'requested_role' else null end,
-    'student'
+    'pending'
   )
   on conflict (id) do update set email = excluded.email;
   return new;
@@ -35,7 +38,7 @@ create trigger on_auth_user_created after insert on auth.users
 for each row execute procedure public.handle_new_user();
 
 insert into public.profiles (id, full_name, email, role)
-select id, coalesce(raw_user_meta_data->>'full_name', split_part(email, '@', 1)), email, 'student'
+select id, coalesce(raw_user_meta_data->>'full_name', split_part(email, '@', 1)), email, 'pending'
 from auth.users
 on conflict (id) do update set email = excluded.email;
 

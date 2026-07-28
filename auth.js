@@ -8,6 +8,7 @@ async function getSessionProfile() {
 function homeForRole(role) {
   if (role === "admin") return "admin.html";
   if (role === "teacher") return "teacher.html";
+  if (role === "pending") return "pending.html";
   return "portal.html";
 }
 
