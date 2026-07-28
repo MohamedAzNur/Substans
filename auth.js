@@ -48,6 +48,7 @@ function setupCampusNavigation(role = null) {
       links: [
         ["admin.html", "Ansøgninger"],
         ["notifications.html", "Notifikationer"],
+        ["activity.html", "Aktivitetslog"],
         ["reports.html", "Rapporter"]
       ]
     },
