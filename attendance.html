@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Fremmøde — Substans</title>
+  <title>Protokol og fremmøde — Substans</title>
   <link rel="stylesheet" href="app.css">
   <style>
     .attendance-layout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.85fr);gap:16px}
@@ -20,8 +20,36 @@
     .attendance-actions button.active[data-status="present"]{background:#e7f6ef;border-color:#23845a;color:#176c49}
     .attendance-actions button.active[data-status="absent"]{background:#fff0ef;border-color:#c94c44;color:#a43d36}
     .attendance-actions button.active[data-status="excused"]{background:#fff7df;border-color:#c68d1c;color:#966810}
+    .protocol{margin-top:18px}
+    .protocol-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:16px}
+    .protocol-head h2{margin:4px 0 0;font-family:Georgia,serif;font-size:30px;font-weight:500}
+    .protocol-filter{display:grid;gap:6px;min-width:min(280px,100%);font-weight:750}
+    .protocol-filter select{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:11px;background:#fff}
+    .protocol-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px}
+    .protocol-stat{padding:18px}
+    .protocol-stat strong{display:block;margin-top:5px;font-size:31px}
+    .protocol-list{display:grid;gap:10px}
+    .protocol-student{overflow:hidden;padding:0}
+    .protocol-summary{display:grid;grid-template-columns:minmax(0,1.4fr) repeat(3,minmax(90px,.55fr)) auto;gap:16px;align-items:center;width:100%;padding:17px 19px;border:0;background:#fff;color:var(--ink);text-align:left;cursor:pointer}
+    .protocol-summary:hover{background:#fbfcfb}
+    .protocol-summary strong{font-size:16px}
+    .protocol-metric{display:grid;gap:2px}
+    .protocol-metric small{color:var(--muted);font-size:11px;font-weight:750;text-transform:uppercase;letter-spacing:.05em}
+    .rate{display:inline-flex;width:max-content;padding:6px 10px;border-radius:999px;font-size:13px;font-weight:850}
+    .rate.low{background:#e7f6ef;color:#176c49}.rate.medium{background:#fff7df;color:#8a610d}.rate.high{background:#fff0ef;color:#9b3c35}.rate.none{background:#eef1ef;color:#64716b}
+    .protocol-chevron{font-size:23px;color:var(--muted);transition:transform .18s ease}
+    .protocol-summary[aria-expanded="true"] .protocol-chevron{transform:rotate(90deg)}
+    .protocol-detail{padding:0 19px 18px;border-top:1px solid var(--line);background:#fbfcfb}
+    .absence-list{display:grid;gap:8px;margin-top:14px}
+    .absence-date{display:grid;grid-template-columns:120px minmax(0,1fr) auto;gap:14px;align-items:center;padding:11px 0;border-bottom:1px solid var(--line)}
+    .absence-date:last-child{border-bottom:0}
+    .absence-date time{font-weight:800}
+    .absence-date span{min-width:0}
+    .absence-type{padding:5px 8px;border-radius:999px;background:#fff0ef;color:#9b3c35;font-size:11px;font-weight:800}
+    .absence-type.excused{background:#fff7df;color:#8a610d}
     @media(max-width:950px){.attendance-layout{grid-template-columns:1fr}}
-    @media(max-width:620px){.student-row{grid-template-columns:1fr}.attendance-actions{justify-content:flex-start}}
+    @media(max-width:800px){.protocol-head{align-items:flex-start;flex-direction:column}.protocol-filter{width:100%}.protocol-summary{grid-template-columns:minmax(0,1fr) auto}.protocol-summary>.protocol-metric{grid-column:1}.protocol-summary>.protocol-metric+.protocol-metric{grid-column:1}.protocol-summary>.protocol-metric+.protocol-metric+.protocol-metric{grid-column:1}.protocol-chevron{grid-column:2;grid-row:1}.absence-date{grid-template-columns:1fr}.absence-type{width:max-content}}
+    @media(max-width:620px){.student-row{grid-template-columns:1fr}.attendance-actions{justify-content:flex-start}.protocol-stats{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -50,8 +78,8 @@
       <header class="topbar">
         <div>
           <span id="roleLabel" class="eyebrow">Undervisning</span>
-          <h1 class="title">Lektioner og fremmøde</h1>
-          <p class="muted">Opret undervisningsgange og registrér elevernes fremmøde.</p>
+          <h1 class="title">Protokol og fremmøde</h1>
+          <p class="muted">Registrér fremmøde og følg fraværet for både holdet og den enkelte elev.</p>
         </div>
         <span id="adminName" class="badge">Administrator</span>
       </header>
@@ -59,7 +87,24 @@
       <section class="grid">
         <article class="card stat"><span class="muted">Lektioner</span><strong id="lessonCount">—</strong></article>
         <article class="card stat"><span class="muted">Til stede</span><strong id="presentCount">—</strong></article>
-        <article class="card stat"><span class="muted">Fraværende</span><strong id="absentCount">—</strong></article>
+        <article class="card stat"><span class="muted">Fravær i alt</span><strong id="absentCount">—</strong></article>
+      </section>
+
+      <section class="protocol">
+        <div class="protocol-head">
+          <div>
+            <span class="eyebrow">Protokoloversigt</span>
+            <h2>Fravær på holdet</h2>
+            <p class="muted">Procenter beregnes kun ud fra de lektioner, hvor fremmødet er registreret.</p>
+          </div>
+          <label class="protocol-filter" for="reportClassId">Vælg hold<select id="reportClassId"></select></label>
+        </div>
+        <div class="protocol-stats">
+          <article class="card protocol-stat"><span class="muted">Holdets fravær</span><strong id="classAbsenceRate">—</strong></article>
+          <article class="card protocol-stat"><span class="muted">Registrerede lektioner</span><strong id="trackedLessonCount">—</strong></article>
+          <article class="card protocol-stat"><span class="muted">Elever på holdet</span><strong id="protocolStudentCount">—</strong></article>
+        </div>
+        <div id="protocolList" class="protocol-list"><article class="card empty">Indlæser protokol…</article></div>
       </section>
 
       <div class="attendance-layout" style="margin-top:16px">
@@ -97,6 +142,7 @@
     let lessons = [];
     let attendance = [];
     let selectedLessonId = null;
+    let selectedReportClassId = null;
 
     function label(status) {
       return { present:"Til stede", absent:"Fraværende", excused:"Meldt fravær" }[status] || status;
@@ -107,10 +153,81 @@
       target.className = "status show " + type;
     }
 
+    function isAway(status) {
+      return status === "absent" || status === "excused";
+    }
+
+    function percentage(part, total) {
+      return total ? Math.round((part / total) * 100) : null;
+    }
+
+    function rateClass(value) {
+      if (value === null) return "none";
+      if (value < 10) return "low";
+      if (value < 20) return "medium";
+      return "high";
+    }
+
+    function renderProtocol() {
+      if (!classes.length) {
+        reportClassId.innerHTML = "";
+        classAbsenceRate.textContent = "—";
+        trackedLessonCount.textContent = "0";
+        protocolStudentCount.textContent = "0";
+        protocolList.innerHTML = '<article class="card empty">Opret et hold for at begynde protokolføringen.</article>';
+        return;
+      }
+
+      if (!selectedReportClassId || !classes.some(item => item.id === selectedReportClassId)) {
+        selectedReportClassId = classes[0].id;
+      }
+      reportClassId.innerHTML = classes.map(item => `<option value="${escapeHtml(item.id)}" ${item.id === selectedReportClassId ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join("");
+
+      const classLessons = lessons.filter(item => item.class_id === selectedReportClassId);
+      const lessonIds = new Set(classLessons.map(item => item.id));
+      const classRecords = attendance.filter(item => lessonIds.has(item.lesson_id));
+      const trackedLessonIds = new Set(classRecords.map(item => item.lesson_id));
+      const memberIds = enrollments.filter(item => item.class_id === selectedReportClassId).map(item => item.student_id);
+      const members = students.filter(item => memberIds.includes(item.id));
+      const awayRecords = classRecords.filter(item => isAway(item.status));
+      const classRate = percentage(awayRecords.length, classRecords.length);
+
+      classAbsenceRate.textContent = classRate === null ? "—" : `${classRate}%`;
+      trackedLessonCount.textContent = trackedLessonIds.size;
+      protocolStudentCount.textContent = members.length;
+
+      protocolList.innerHTML = members.length ? members.map(student => {
+        const studentRecords = classRecords.filter(item => item.student_id === student.id);
+        const studentAway = studentRecords.filter(item => isAway(item.status));
+        const studentRate = percentage(studentAway.length, studentRecords.length);
+        const absenceRows = studentAway
+          .map(record => ({ record, lesson: classLessons.find(item => item.id === record.lesson_id) }))
+          .filter(item => item.lesson)
+          .sort((a, b) => b.lesson.lesson_date.localeCompare(a.lesson.lesson_date));
+        return `<article class="card protocol-student">
+          <button class="protocol-summary" type="button" data-protocol-student="${escapeHtml(student.id)}" aria-expanded="false">
+            <strong>${escapeHtml(student.full_name)}</strong>
+            <span class="protocol-metric"><small>Registreret</small><b>${studentRecords.length} lektion${studentRecords.length === 1 ? "" : "er"}</b></span>
+            <span class="protocol-metric"><small>Fravær</small><b>${studentAway.length} gang${studentAway.length === 1 ? "" : "e"}</b></span>
+            <span class="protocol-metric"><small>Fraværsprocent</small><span class="rate ${rateClass(studentRate)}">${studentRate === null ? "Ikke beregnet" : `${studentRate}%`}</span></span>
+            <span class="protocol-chevron" aria-hidden="true">›</span>
+          </button>
+          <div class="protocol-detail" data-protocol-detail="${escapeHtml(student.id)}" hidden>
+            ${absenceRows.length ? `<div class="absence-list">${absenceRows.map(({ record, lesson }) => `
+              <div class="absence-date">
+                <time datetime="${escapeHtml(lesson.lesson_date)}">${escapeHtml(new Date(lesson.lesson_date + "T12:00:00").toLocaleDateString("da-DK", { day:"numeric", month:"long", year:"numeric" }))}</time>
+                <span>${escapeHtml(lesson.topic)}</span>
+                <span class="absence-type ${record.status === "excused" ? "excused" : ""}">${record.status === "excused" ? "Meldt fravær" : "Fraværende"}</span>
+              </div>`).join("")}</div>` : '<p class="muted">Ingen registrerede fraværsdatoer.</p>'}
+          </div>
+        </article>`;
+      }).join("") : '<article class="card empty">Der er endnu ingen elever på dette hold.</article>';
+    }
+
     function renderLessons() {
       lessonCount.textContent = lessons.length;
       presentCount.textContent = attendance.filter(item => item.status === "present").length;
-      absentCount.textContent = attendance.filter(item => item.status === "absent").length;
+      absentCount.textContent = attendance.filter(item => isAway(item.status)).length;
 
       classId.innerHTML = classes.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
       createLessonButton.disabled = !classes.length;
@@ -126,6 +243,7 @@
           <div class="lesson-meta">
             <span>${records.filter(item => item.status === "present").length} til stede</span>
             <span>${records.filter(item => item.status === "absent").length} fraværende</span>
+            <span>${records.filter(item => item.status === "excused").length} meldt fravær</span>
           </div>
           ${lesson.notes ? `<p class="muted">${escapeHtml(lesson.notes)}</p>` : ""}
           <button class="button secondary" type="button" data-lesson-id="${escapeHtml(lesson.id)}">Registrér fremmøde</button>
@@ -170,8 +288,23 @@
       lessons = lessonResult.data || [];
       attendance = attendanceResult.data || [];
       renderLessons();
+      renderProtocol();
       if (selectedLessonId) renderAttendance();
     }
+
+    reportClassId.addEventListener("change", () => {
+      selectedReportClassId = reportClassId.value;
+      renderProtocol();
+    });
+
+    protocolList.addEventListener("click", event => {
+      const button = event.target.closest("[data-protocol-student]");
+      if (!button) return;
+      const detail = protocolList.querySelector(`[data-protocol-detail="${button.dataset.protocolStudent}"]`);
+      const expanded = button.getAttribute("aria-expanded") === "true";
+      button.setAttribute("aria-expanded", String(!expanded));
+      detail.hidden = expanded;
+    });
 
     lessonForm.addEventListener("submit", async event => {
       event.preventDefault();
