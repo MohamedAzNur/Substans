@@ -11,6 +11,8 @@
     .agent-pulse{width:14px;height:14px;flex:0 0 auto;margin-top:5px;border:4px solid rgba(255,255,255,.25);border-radius:999px;background:#aee1c3;box-shadow:0 0 0 7px rgba(174,225,195,.08)}
     .agent-status h2{margin:0 0 7px;font-family:Georgia,serif;font-size:28px;font-weight:500}
     .agent-status p{margin:0;color:#ccddd5}
+    .agent-status.issue{background:linear-gradient(145deg,#6b351d,#9a5938)}
+    .agent-status.issue .agent-pulse{background:#ffd6ae}
     .summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
     .summary-card{padding:18px}
     .summary-card strong{display:block;margin-top:4px;font-size:30px}
@@ -41,10 +43,15 @@
     .history-row{display:grid;grid-template-columns:minmax(170px,1fr) minmax(180px,.8fr) auto;gap:16px;align-items:center;padding:15px 0;border-bottom:1px solid var(--line)}
     .history-row:last-child{border-bottom:0}
     .history-row strong,.history-row span{min-width:0}
+    .upcoming-list{display:grid;gap:0}
+    .upcoming-row{display:grid;grid-template-columns:minmax(150px,1fr) minmax(210px,1.15fr) minmax(210px,1.15fr) auto;gap:16px;align-items:center;padding:16px 0;border-bottom:1px solid var(--line)}
+    .upcoming-row:last-child{border-bottom:0}
+    .upcoming-row strong,.upcoming-row span{min-width:0}
+    .upcoming-meta{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
     .info-callout{display:flex;align-items:flex-start;gap:12px;margin-top:16px;padding:15px;border-radius:14px;background:#f7f4e9;color:#5d563c}
     .info-callout b{flex:0 0 auto}
     @media(max-width:980px){.agent-hero,.class-reminder{grid-template-columns:1fr}.class-summary{display:grid;grid-template-columns:1fr auto;align-items:start}.class-summary .schedule{grid-column:1}.switch-row{grid-column:2;grid-row:1/3;margin:0}}
-    @media(max-width:680px){.summary-grid,.settings-grid{grid-template-columns:1fr}.settings-grid .full{grid-column:auto}.section-head{align-items:flex-start;flex-direction:column}.class-summary{display:flex}.history-row{grid-template-columns:1fr}.card-actions{align-items:stretch;flex-direction:column}.card-status{margin:0}.card-actions .button{width:100%}}
+    @media(max-width:760px){.summary-grid,.settings-grid{grid-template-columns:1fr}.settings-grid .full{grid-column:auto}.section-head{align-items:flex-start;flex-direction:column}.class-summary{display:flex}.history-row,.upcoming-row{grid-template-columns:1fr}.upcoming-meta{justify-content:flex-start}.card-actions{align-items:stretch;flex-direction:column}.card-status{margin:0}.card-actions .button{width:100%}}
   </style>
 </head>
 <body>
@@ -73,11 +80,11 @@
       </header>
 
       <section class="agent-hero">
-        <article class="card agent-status">
+        <article id="agentStatusCard" class="card agent-status">
           <span class="agent-pulse" aria-hidden="true"></span>
           <div>
-            <h2>Agenten er aktiv</h2>
-            <p>Den kontrollerer planen hvert femte minut og sender kun én besked pr. hold og undervisningsdag.</p>
+            <h2 id="agentStatusTitle">Kontrollerer agenten…</h2>
+            <p id="agentStatusText">Henter den seneste automatiske kontrol.</p>
           </div>
         </article>
         <div class="summary-grid" aria-label="Status">
@@ -88,6 +95,19 @@
       </section>
 
       <p id="globalStatus" class="status" role="status" aria-live="polite"></p>
+
+      <section>
+        <div class="section-head">
+          <div>
+            <span class="eyebrow">Næste automatiske handlinger</span>
+            <h2>Planlagte påmindelser</h2>
+            <p class="muted">Her kan du se modtagerne og tidspunktet, før agenten sender.</p>
+          </div>
+        </div>
+        <article class="card">
+          <div id="upcomingList" class="upcoming-list"><div class="empty">Beregner planen…</div></div>
+        </article>
+      </section>
 
       <section>
         <div class="section-head">
@@ -124,8 +144,8 @@
   <script src="supabase-config.js"></script>
   <script src="auth.js"></script>
   <script>
-    const DEFAULT_TITLE = "Husk undervisningen i dag";
-    const DEFAULT_BODY = "Husk at {hold} har undervisning i dag kl. {tid}. Åbn Substans Campus for lektionslink og materialer.";
+    const DEFAULT_TITLE = "Husk undervisningen {relative_dag}";
+    const DEFAULT_BODY = "Husk at {hold} har undervisning {relative_dag} kl. {tid}. Åbn Substans Campus for lektionslink og materialer.";
     const LEAD_OPTIONS = [
       [60, "1 time før"],
       [120, "2 timer før"],
@@ -140,6 +160,8 @@
     let settings = [];
     let deliveries = [];
     let deliveryCount = 0;
+    let upcomingReminders = [];
+    let agentHealth = null;
 
     const byId = id => document.getElementById(id);
     const className = id => classes.find(item => item.id === id)?.name || "Ukendt hold";
@@ -151,11 +173,16 @@
       body_template: DEFAULT_BODY
     };
     const timeLabel = value => value ? value.slice(0, 5).replace(":", ".") : "tidspunkt mangler";
-    const applyTemplate = (template, item) => String(template || "")
+    const applyTemplate = (template, item, leadMinutes = 180) => String(template || "")
       .replaceAll("{hold}", item.name || "holdet")
       .replaceAll("{tid}", timeLabel(item.start_time))
       .replaceAll("{dag}", String(item.weekday || "undervisningsdagen").toLowerCase())
+      .replaceAll("{relative_dag}", Number(leadMinutes) >= 1440 ? "i morgen" : "i dag")
       .replaceAll("{lektion}", "dagens lektion");
+
+    const dateTimeLabel = value => value
+      ? new Date(value).toLocaleString("da-DK", { dateStyle: "medium", timeStyle: "short" })
+      : "Ikke beregnet";
 
     function showGlobalStatus(message, type = "success") {
       const status = byId("globalStatus");
@@ -169,6 +196,44 @@
       byId("activeCount").textContent = enabledClasses.length;
       byId("missingCount").textContent = activeClasses.filter(item => !item.weekday || !item.start_time).length;
       byId("sentCount").textContent = deliveryCount;
+    }
+
+    function renderAgentHealth() {
+      const active = Boolean(agentHealth?.agent_active);
+      const lastSucceeded = !agentHealth?.last_run_status || ["succeeded", "waiting"].includes(agentHealth.last_run_status);
+      byId("agentStatusCard").classList.toggle("issue", !active || !lastSucceeded);
+      byId("agentStatusTitle").textContent = active && lastSucceeded ? "Agenten er aktiv" : "Agenten kræver opmærksomhed";
+      if (!active) {
+        byId("agentStatusText").textContent = "Den automatiske kontrol er ikke aktiv. Kør databaseopsætningen igen.";
+        return;
+      }
+      if (agentHealth.last_run_status === "failed") {
+        byId("agentStatusText").textContent = `Seneste kontrol fejlede ${dateTimeLabel(agentHealth.last_run_at)}. Prøv “Kontrollér nu”.`;
+        return;
+      }
+      byId("agentStatusText").textContent = agentHealth.last_run_at
+        ? `Aktiv hvert femte minut · senest kontrolleret ${dateTimeLabel(agentHealth.last_run_at)}.`
+        : "Aktiv hvert femte minut. Den første automatiske kontrol afventer.";
+    }
+
+    function renderUpcoming() {
+      const list = byId("upcomingList");
+      if (!upcomingReminders.length) {
+        list.innerHTML = '<div class="empty">Der er ingen kommende påmindelser. Kontrollér holdenes ugedag og tidspunkt.</div>';
+        return;
+      }
+      list.innerHTML = upcomingReminders
+        .sort((a, b) => new Date(a.remind_at) - new Date(b.remind_at))
+        .map(item => `
+          <div class="upcoming-row">
+            <strong>${escapeHtml(item.class_name)}</strong>
+            <span><small class="muted">Undervisning</small><br>${escapeHtml(dateTimeLabel(item.scheduled_start))}</span>
+            <span><small class="muted">Beskeden sendes</small><br><b>${escapeHtml(dateTimeLabel(item.remind_at))}</b></span>
+            <span class="upcoming-meta">
+              <span class="badge">${Number(item.audience_count) || 0} elever/familier</span>
+              <span class="badge">${item.schedule_source === "calendar" ? "Kalender" : "Fast plan"}</span>
+            </span>
+          </div>`).join("");
     }
 
     function renderClassCards() {
@@ -211,7 +276,7 @@
               <label class="full">
                 Besked
                 <textarea data-field="body_template" maxlength="1000">${escapeHtml(setting.body_template)}</textarea>
-                <span class="template-help">Du kan bruge {hold}, {tid}, {dag} og {lektion}. De udfyldes automatisk.</span>
+                <span class="template-help">Du kan bruge {hold}, {tid}, {dag}, {relative_dag} og {lektion}. “{relative_dag}” bliver automatisk til “i dag” eller “i morgen”.</span>
               </label>
               <div class="message-preview" aria-live="polite">
                 <small>Sådan ser beskeden ud</small>
@@ -234,8 +299,9 @@
       if (!item) return;
       const title = card.querySelector('[data-field="title_template"]').value;
       const body = card.querySelector('[data-field="body_template"]').value;
-      card.querySelector("[data-preview-title]").textContent = applyTemplate(title, item);
-      card.querySelector("[data-preview-body]").textContent = applyTemplate(body, item);
+      const leadMinutes = Number(card.querySelector('[data-field="lead_minutes"]').value);
+      card.querySelector("[data-preview-title]").textContent = applyTemplate(title, item, leadMinutes);
+      card.querySelector("[data-preview-body]").textContent = applyTemplate(body, item, leadMinutes);
       const toggle = card.querySelector('[data-field="enabled"]');
       toggle.nextElementSibling.textContent = toggle.checked ? "Aktiv" : "Slået fra";
     }
@@ -250,15 +316,17 @@
         <div class="history-row">
           <strong>${escapeHtml(className(item.class_id))}</strong>
           <span>${new Date(item.scheduled_start).toLocaleString("da-DK", { dateStyle: "long", timeStyle: "short" })}</span>
-          <span class="badge">Sendt ${new Date(item.sent_at).toLocaleString("da-DK", { dateStyle: "short", timeStyle: "short" })}</span>
+          <span class="upcoming-meta"><span class="badge">${Number(item.audience_count) || 0} elever/familier</span><span class="badge">Sendt ${new Date(item.sent_at).toLocaleString("da-DK", { dateStyle: "short", timeStyle: "short" })}</span></span>
         </div>`).join("");
     }
 
     async function loadData() {
-      const [classResult, settingsResult, deliveryResult] = await Promise.all([
+      const [classResult, settingsResult, deliveryResult, upcomingResult, healthResult] = await Promise.all([
         supabaseClient.from("classes").select("id,name,weekday,start_time,status").order("name"),
         supabaseClient.from("class_reminder_settings").select("*"),
-        supabaseClient.from("lesson_reminder_deliveries").select("*", { count: "exact" }).order("sent_at", { ascending: false }).limit(20)
+        supabaseClient.from("lesson_reminder_deliveries").select("*", { count: "exact" }).order("sent_at", { ascending: false }).limit(20),
+        supabaseClient.rpc("get_lesson_reminder_schedule", { p_days: 14 }),
+        supabaseClient.rpc("get_lesson_reminder_agent_health")
       ]);
       const error = classResult.error || settingsResult.error || deliveryResult.error;
       if (error) {
@@ -269,9 +337,16 @@
       settings = settingsResult.data || [];
       deliveries = deliveryResult.data || [];
       deliveryCount = deliveryResult.count || 0;
+      upcomingReminders = upcomingResult.data || [];
+      agentHealth = healthResult.data?.[0] || null;
       renderClassCards();
       renderSummary();
       renderDeliveries();
+      renderUpcoming();
+      renderAgentHealth();
+      if (upcomingResult.error || healthResult.error) {
+        showGlobalStatus("Agentens nye statusoverblik mangler databaseopdateringen.", "error");
+      }
     }
 
     byId("classList").addEventListener("input", event => {
@@ -310,6 +385,9 @@
       settings.push(data);
       renderSummary();
       status.textContent = "Gemt";
+      const { data: refreshedSchedule } = await supabaseClient.rpc("get_lesson_reminder_schedule", { p_days: 14 });
+      upcomingReminders = refreshedSchedule || [];
+      renderUpcoming();
       setTimeout(() => { if (status.textContent === "Gemt") status.textContent = ""; }, 2500);
     });
 
