@@ -40,6 +40,11 @@
     .class-card h3{font-family:Georgia,serif;font-weight:500;font-size:25px;margin:0}
     .class-meta{display:flex;gap:8px;flex-wrap:wrap}
     .class-meta span{padding:7px 10px;border-radius:999px;background:var(--brand-soft);color:var(--brand);font-size:12px;font-weight:750}
+    .video-status{display:grid;gap:9px;padding:13px;border:1px solid #c9d9d0;border-radius:12px;background:#f4f8f5}
+    .video-status-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center}
+    .video-status-row strong{font-size:14px}.video-status-row b{color:var(--brand)}
+    .video-bar{height:8px;border-radius:99px;background:#dde7e1;overflow:hidden}.video-bar span{display:block;height:100%;background:var(--brand)}
+    .video-done{color:#26653a;font-size:12px;font-weight:800}.video-waiting{color:var(--muted);font-size:12px;font-weight:750}
     @media(max-width:900px){.campus-grid{grid-template-columns:1fr}}
   </style>
 </head>
@@ -152,11 +157,13 @@
     let learningItems = [];
     let classes = [];
     let students = [];
+    let enrollments = [];
     let feedbackRows = [];
     let messages = [];
     let payments = [];
     let calendarEvents = [];
     let progressRows = [];
+    let videoProgressRows = [];
     let activeFilter = "all";
     let currentRole = null;
 
@@ -173,6 +180,48 @@
       return `${prefix} ${due.toLocaleDateString("da-DK")}`;
     }
 
+    function youtubeId(value) {
+      if (!value) return null;
+      try {
+        const url = new URL(value);
+        const host = url.hostname.replace(/^www\./, "");
+        if (host === "youtu.be") return url.pathname.split("/").filter(Boolean)[0] || null;
+        if (["youtube.com", "m.youtube.com", "music.youtube.com"].includes(host)) {
+          if (url.searchParams.get("v")) return url.searchParams.get("v");
+          const parts = url.pathname.split("/").filter(Boolean);
+          if (["embed", "shorts", "live"].includes(parts[0])) return parts[1] || null;
+        }
+      } catch (_) {}
+      return null;
+    }
+
+    function videoProvider(item) {
+      if (item.video_provider) return item.video_provider;
+      if (youtubeId(item.resource_url)) return "youtube";
+      if ((item.file_type || "").startsWith("video/")) return "uploaded";
+      return null;
+    }
+
+    function watchedPercent(row) {
+      if (!row || !Number(row.duration_seconds)) return 0;
+      return Math.min(100, Math.round(Number(row.watched_seconds || 0) / Number(row.duration_seconds) * 100));
+    }
+
+    function videoStatus(item) {
+      if (!videoProvider(item) || !["student", "parent"].includes(currentRole)) return "";
+      const relevantStudents = students.filter(student => enrollments.some(row => row.student_id === student.id && row.class_id === item.class_id));
+      const rows = relevantStudents.map(student => {
+        const progress = videoProgressRows.find(row => row.learning_item_id === item.id && row.student_id === student.id);
+        const percent = watchedPercent(progress);
+        const label = percent >= 90 ? "Gennemført" : (percent ? `${percent}% set` : "Ikke startet");
+        return `<div class="video-status-row">
+          <div><strong>${currentRole === "parent" ? escapeHtml(student.full_name) : "Din visning"}</strong><div class="video-bar" aria-label="${percent} procent set"><span style="width:${percent}%"></span></div></div>
+          <span class="${percent >= 90 ? "video-done" : "video-waiting"}">${escapeHtml(label)}</span>
+        </div>`;
+      }).join("");
+      return `<div class="video-status">${rows}</div>`;
+    }
+
     async function signedUrl(path) {
       if (!path) return null;
       const { data, error } = await supabaseClient.storage.from("learning-attachments").createSignedUrl(path, 3600);
@@ -185,6 +234,7 @@
       learningList.innerHTML = visible.length ? visible.map((item, index) => {
         const itemClass = classes.find(entry => entry.id === item.class_id);
         const due = dueLabel(item.due_date);
+        const provider = videoProvider(item);
         return `<article class="card learning-card">
           <div class="learning-head">
             <div>
@@ -195,12 +245,14 @@
           </div>
           <div class="meta">
             <span>${escapeHtml(labelFor(item.kind))}</span>
+            ${provider ? `<span>Videolektion</span>` : ""}
             ${due ? `<span>${escapeHtml(due)}</span>` : ""}
           </div>
           ${item.description ? `<p class="muted">${escapeHtml(item.description)}</p>` : ""}
-          ${item.file_path ? `<div class="file-row"><span class="file-name">${escapeHtml(item.file_name || "Vedhæftet fil")}</span>${urls[index] ? `<a class="button secondary" href="${escapeHtml(urls[index])}" target="_blank" rel="noopener">Åbn fil</a>` : `<span class="muted">Filen kan ikke åbnes</span>`}</div>` : ""}
+          ${item.file_path && !provider ? `<div class="file-row"><span class="file-name">${escapeHtml(item.file_name || "Vedhæftet fil")}</span>${urls[index] ? `<a class="button secondary" href="${escapeHtml(urls[index])}" target="_blank" rel="noopener">Åbn fil</a>` : `<span class="muted">Filen kan ikke åbnes</span>`}</div>` : ""}
+          ${videoStatus(item)}
           <div class="actions">
-            ${item.resource_url ? `<a class="button secondary" href="${escapeHtml(item.resource_url)}" target="_blank" rel="noopener">Åbn link</a>` : ""}
+            ${provider && currentRole !== "parent" ? `<a class="button" href="video.html?item=${escapeHtml(item.id)}">${currentRole === "student" ? "Se eller fortsæt video" : "Forhåndsvis video"}</a>` : (!provider && item.resource_url ? `<a class="button secondary" href="${escapeHtml(item.resource_url)}" target="_blank" rel="noopener">Åbn link</a>` : "")}
             ${item.kind === "homework" ? `<a class="button" href="assignments.html">${currentRole === "parent" ? "Se afleveringsstatus" : "Se eller aflever lektie"}</a>` : ""}
           </div>
         </article>`;
@@ -272,7 +324,7 @@
       let classIds = [];
 
       if (role === "admin" || role === "teacher") {
-        const [classResult, learningResult, studentResult, feedbackResult, messageResult, paymentResult, calendarResult, progressResult] = await Promise.all([
+        const [classResult, learningResult, studentResult, feedbackResult, messageResult, paymentResult, calendarResult, progressResult, videoResult] = await Promise.all([
           supabaseClient.from("classes").select("id,name,weekday,start_time").order("name"),
           supabaseClient.from("learning_items").select("*").order("created_at", { ascending:false }),
           supabaseClient.from("students").select("id,full_name").order("full_name"),
@@ -280,7 +332,8 @@
           supabaseClient.from("class_messages").select("*").order("created_at",{ascending:false}),
           supabaseClient.from("student_payments").select("*").order("created_at",{ascending:false}),
           supabaseClient.from("calendar_events").select("*").gte("event_date",new Date().toISOString().slice(0,10)).order("event_date").order("start_time"),
-          supabaseClient.from("student_progress").select("*").order("created_at",{ascending:false})
+          supabaseClient.from("student_progress").select("*").order("created_at",{ascending:false}),
+          supabaseClient.from("video_watch_progress").select("*").order("last_watched_at",{ascending:false})
         ]);
         classes = classResult.data || [];
         learningItems = learningResult.data || [];
@@ -290,6 +343,7 @@
         payments = paymentResult.data || [];
         calendarEvents = calendarResult.data || [];
         progressRows = progressResult.data || [];
+        videoProgressRows = videoResult.data || [];
       } else {
         const { data: studentRows } = await supabaseClient
           .from("students")
@@ -300,9 +354,10 @@
         if (students.length) {
           const { data: enrollmentRows } = await supabaseClient
             .from("class_enrollments")
-            .select("class_id")
+            .select("class_id,student_id")
             .in("student_id", students.map(student => student.id));
-          classIds = [...new Set((enrollmentRows || []).map(item => item.class_id))];
+          enrollments = enrollmentRows || [];
+          classIds = [...new Set(enrollments.map(item => item.class_id))];
         }
         if (classIds.length) {
           const [classResult, learningResult, feedbackResult, messageResult] = await Promise.all([
@@ -321,8 +376,12 @@
           payments=paymentRows||[];
         }
         if(students.length){
-          const {data:studentProgressRows}=await supabaseClient.from("student_progress").select("*").in("student_id",students.map(student=>student.id)).order("created_at",{ascending:false});
+          const [{data:studentProgressRows},{data:studentVideoRows}]=await Promise.all([
+            supabaseClient.from("student_progress").select("*").in("student_id",students.map(student=>student.id)).order("created_at",{ascending:false}),
+            supabaseClient.from("video_watch_progress").select("*").in("student_id",students.map(student=>student.id)).order("last_watched_at",{ascending:false})
+          ]);
           progressRows=studentProgressRows||[];
+          videoProgressRows=studentVideoRows||[];
         }
         if(classIds.length){
           const {data:calendarRows}=await supabaseClient.from("calendar_events").select("*").in("class_id",classIds).gte("event_date",new Date().toISOString().slice(0,10)).order("event_date").order("start_time");

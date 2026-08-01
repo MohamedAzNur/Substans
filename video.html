@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Videolektion — Substans</title>
+  <link rel="stylesheet" href="app.css">
+  <style>
+    .video-page{max-width:1080px;margin:0 auto}.video-header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:18px}
+    .video-layout{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(280px,.5fr);gap:16px;align-items:start}
+    .video-stage{overflow:hidden;padding:0;background:#07182d;border-color:#07182d;aspect-ratio:16/9;display:grid;place-items:center}
+    .video-stage iframe,.video-stage video{width:100%;height:100%;border:0;display:block;background:#000}
+    .lesson-info{display:grid;gap:13px}.lesson-info h1{font-family:Georgia,serif;font-size:clamp(29px,4vw,45px);font-weight:500;margin:3px 0}
+    .progress-card{display:grid;gap:14px;position:sticky;top:22px}.progress-card h2{font-family:Georgia,serif;font-size:26px;font-weight:500;margin:0}
+    .progress-value{font-family:Georgia,serif;font-size:48px;color:var(--brand);line-height:1}
+    .watch-bar{height:12px;border-radius:99px;background:#dce6e0;overflow:hidden}.watch-bar span{display:block;width:0;height:100%;background:linear-gradient(90deg,var(--brand),#4c8a69);transition:width .35s ease}
+    .watch-times{display:flex;justify-content:space-between;gap:12px;font-size:13px;color:var(--muted)}
+    .tracking-note{padding:12px;border-radius:11px;background:var(--brand-soft);color:var(--brand);font-size:13px;line-height:1.55}
+    .save-state{font-size:12px;color:var(--muted);min-height:18px}.complete-state{padding:11px;border-radius:11px;background:#e6f4ea;color:#26653a;font-weight:800}
+    .preview-state{padding:11px;border-radius:11px;background:#fff2df;color:#7b4b00;font-weight:750}
+    .video-error{padding:28px;text-align:center;color:#fff}.video-error a{color:#fff}
+    @media(max-width:900px){.video-layout{grid-template-columns:1fr}.progress-card{position:static}.video-header{display:grid}}
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">Åbner videolektionen…</div>
+
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="index.html">Substans</a>
+      <nav class="nav">
+        <a href="portal.html">Mit overblik</a>
+        <a href="notifications.html">Notifikationer</a>
+        <a href="lesson-room.html">Lektionsrum</a>
+        <a href="portal.html#learning">Materialer og lektier</a>
+        <a href="quizzes.html">Quizzer</a>
+        <a href="assignments.html">Afleveringer</a>
+        <a href="profile.html">Min profil</a>
+      </nav>
+      <div class="sidebar-footer"><button class="button secondary" onclick="signOut()">Log ud</button></div>
+    </aside>
+
+    <main class="main">
+      <div class="video-page">
+        <header class="video-header">
+          <div class="lesson-info">
+            <span id="className" class="eyebrow">Videolektion</span>
+            <h1 id="videoTitle">Videolektion</h1>
+            <p id="videoDescription" class="muted"></p>
+          </div>
+          <a id="backLink" class="button secondary" href="portal.html#learning">Tilbage til materialer</a>
+        </header>
+
+        <div class="video-layout">
+          <section id="videoStage" class="card video-stage" aria-label="Videoafspiller"></section>
+          <aside class="card progress-card">
+            <span class="eyebrow">Din visning</span>
+            <h2 id="progressHeading">Videoens fremgang</h2>
+            <strong id="progressValue" class="progress-value">0%</strong>
+            <div class="watch-bar" role="progressbar" aria-label="Set del af videoen" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="progressFill"></span></div>
+            <div class="watch-times"><span id="watchedTime">0:00 set</span><span id="durationTime">0:00 i alt</span></div>
+            <div id="completionMessage" class="complete-state" hidden>Videolektionen er gennemført.</div>
+            <div id="previewMessage" class="preview-state" hidden>Denne afspilning er en forhåndsvisning og ændrer ikke elevens statistik.</div>
+            <p class="tracking-note">Kun de sekunder, der faktisk afspilles, tæller med. Hvis man springer frem, bliver det oversprungne ikke registreret som set.</p>
+            <div id="saveState" class="save-state" role="status"></div>
+          </aside>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    let authState = null;
+    let item = null;
+    let student = null;
+    let progress = null;
+    let watchedRanges = [];
+    let durationSeconds = 0;
+    let lastPositionSeconds = 0;
+    let lastSample = null;
+    let isPlaying = false;
+    let player = null;
+    let ticker = null;
+    let lastSavedAt = 0;
+    let saveInFlight = false;
+
+    function youtubeId(value) {
+      if (!value) return null;
+      try {
+        const url = new URL(value);
+        const host = url.hostname.replace(/^www\./, "");
+        if (host === "youtu.be") return url.pathname.split("/").filter(Boolean)[0] || null;
+        if (["youtube.com", "m.youtube.com", "music.youtube.com"].includes(host)) {
+          if (url.searchParams.get("v")) return url.searchParams.get("v");
+          const parts = url.pathname.split("/").filter(Boolean);
+          if (["embed", "shorts", "live"].includes(parts[0])) return parts[1] || null;
+        }
+      } catch (_) {}
+      return null;
+    }
+
+    function providerFor(value) {
+      if (value.video_provider) return value.video_provider;
+      if (youtubeId(value.resource_url)) return "youtube";
+      if ((value.file_type || "").startsWith("video/")) return "uploaded";
+      return null;
+    }
+
+    function mergeRanges(ranges) {
+      const clean = (Array.isArray(ranges) ? ranges : [])
+        .map(range => [Math.max(0, Number(range?.[0] || 0)), Math.max(0, Number(range?.[1] || 0))])
+        .filter(range => range[1] > range[0])
+        .sort((a,b) => a[0] - b[0]);
+      const merged = [];
+      clean.forEach(range => {
+        const previous = merged[merged.length - 1];
+        if (!previous || range[0] > previous[1] + 0.75) merged.push(range);
+        else previous[1] = Math.max(previous[1], range[1]);
+      });
+      return merged.map(range => [Number(range[0].toFixed(2)), Number(range[1].toFixed(2))]);
+    }
+
+    function totalWatched() {
+      return mergeRanges(watchedRanges).reduce((sum, range) => sum + range[1] - range[0], 0);
+    }
+
+    function percentWatched() {
+      return durationSeconds ? Math.min(100, Math.round(totalWatched() / durationSeconds * 100)) : 0;
+    }
+
+    function formatTime(value) {
+      const total = Math.max(0, Math.round(Number(value || 0)));
+      const hours = Math.floor(total / 3600);
+      const minutes = Math.floor((total % 3600) / 60);
+      const seconds = String(total % 60).padStart(2, "0");
+      return hours ? `${hours}:${String(minutes).padStart(2,"0")}:${seconds}` : `${minutes}:${seconds}`;
+    }
+
+    function updateProgress() {
+      const percent = percentWatched();
+      progressValue.textContent = `${percent}%`;
+      progressFill.style.width = `${percent}%`;
+      document.querySelector(".watch-bar").setAttribute("aria-valuenow", String(percent));
+      watchedTime.textContent = `${formatTime(totalWatched())} set`;
+      durationTime.textContent = `${formatTime(durationSeconds)} i alt`;
+      completionMessage.hidden = percent < 90;
+    }
+
+    function addPlayedSegment(from, to) {
+      const delta = to - from;
+      if (from < 0 || delta <= 0 || delta > 2.5) return;
+      watchedRanges = mergeRanges([...watchedRanges, [from, Math.min(to, durationSeconds || to)]]);
+    }
+
+    async function saveProgress(force = false) {
+      if (authState?.profile?.role !== "student" || !student || !durationSeconds || saveInFlight) return;
+      const now = Date.now();
+      if (!force && now - lastSavedAt < 8000) return;
+      saveInFlight = true;
+      const percent = percentWatched();
+      saveState.textContent = "Gemmer din visning…";
+      const payload = {
+        learning_item_id: item.id,
+        student_id: student.id,
+        watched_seconds: Number(totalWatched().toFixed(2)),
+        duration_seconds: Number(durationSeconds.toFixed(2)),
+        last_position_seconds: Number(lastPositionSeconds.toFixed(2)),
+        watched_ranges: mergeRanges(watchedRanges),
+        last_watched_at: new Date().toISOString(),
+        completed_at: percent >= 90 ? (progress?.completed_at || new Date().toISOString()) : (progress?.completed_at || null)
+      };
+      const { data, error } = await supabaseClient.from("video_watch_progress")
+        .upsert(payload, {onConflict:"learning_item_id,student_id"})
+        .select().single();
+      saveInFlight = false;
+      if (error) {
+        saveState.textContent = "Fremgangen kunne ikke gemmes lige nu.";
+        return;
+      }
+      progress = data;
+      lastSavedAt = now;
+      saveState.textContent = "Din fremgang er gemt.";
+    }
+
+    function samplePosition(current, duration) {
+      durationSeconds = Number(duration || durationSeconds || 0);
+      lastPositionSeconds = Math.max(0, Number(current || 0));
+      if (isPlaying && lastSample !== null) addPlayedSegment(lastSample, lastPositionSeconds);
+      lastSample = lastPositionSeconds;
+      updateProgress();
+      saveProgress(false);
+    }
+
+    function startTicker(getCurrent, getDuration) {
+      clearInterval(ticker);
+      ticker = setInterval(() => samplePosition(getCurrent(), getDuration()), 1000);
+    }
+
+    async function loadProgress() {
+      if (authState.profile.role !== "student") {
+        previewMessage.hidden = false;
+        progressHeading.textContent = "Forhåndsvisning";
+        return;
+      }
+      const { data: studentRows } = await supabaseClient.from("students")
+        .select("id,full_name,student_profile_id")
+        .eq("student_profile_id", authState.session.user.id)
+        .limit(1);
+      student = studentRows?.[0] || null;
+      if (!student) throw new Error("Elevprofilen er endnu ikke knyttet til kontoen.");
+      const { data } = await supabaseClient.from("video_watch_progress")
+        .select("*").eq("learning_item_id", item.id).eq("student_id", student.id).maybeSingle();
+      progress = data || null;
+      watchedRanges = mergeRanges(progress?.watched_ranges || []);
+      durationSeconds = Number(progress?.duration_seconds || 0);
+      lastPositionSeconds = Number(progress?.last_position_seconds || 0);
+      updateProgress();
+    }
+
+    async function renderUploadedVideo() {
+      const { data, error } = await supabaseClient.storage.from("learning-attachments").createSignedUrl(item.file_path, 7200);
+      if (error || !data?.signedUrl) throw new Error("Videofilen kunne ikke åbnes.");
+      videoStage.innerHTML = `<video id="nativeVideo" controls preload="metadata" playsinline></video>`;
+      const video = document.getElementById("nativeVideo");
+      video.src = data.signedUrl;
+      video.addEventListener("loadedmetadata", () => {
+        durationSeconds = Number(video.duration || durationSeconds);
+        if (lastPositionSeconds > 2 && lastPositionSeconds < durationSeconds - 2) video.currentTime = lastPositionSeconds;
+        updateProgress();
+      });
+      video.addEventListener("play", () => { isPlaying = true; lastSample = Number(video.currentTime || 0); });
+      video.addEventListener("pause", () => { samplePosition(video.currentTime, video.duration); isPlaying = false; lastSample = null; saveProgress(true); });
+      video.addEventListener("seeking", () => { lastSample = null; });
+      video.addEventListener("seeked", () => { lastSample = Number(video.currentTime || 0); });
+      video.addEventListener("ended", () => { samplePosition(video.duration, video.duration); isPlaying = false; saveProgress(true); });
+      startTicker(() => Number(video.currentTime || 0), () => Number(video.duration || durationSeconds));
+    }
+
+    function renderYouTubeVideo(videoId) {
+      videoStage.innerHTML = '<div id="youtubePlayer"></div>';
+      window.onYouTubeIframeAPIReady = () => {
+        player = new YT.Player("youtubePlayer", {
+          width:"100%", height:"100%", videoId,
+          playerVars:{playsinline:1,rel:0,modestbranding:1},
+          events:{
+            onReady:event => {
+              durationSeconds = Number(event.target.getDuration() || durationSeconds);
+              if (lastPositionSeconds > 2 && lastPositionSeconds < durationSeconds - 2) event.target.seekTo(lastPositionSeconds, true);
+              updateProgress();
+              startTicker(() => Number(player.getCurrentTime() || 0), () => Number(player.getDuration() || durationSeconds));
+            },
+            onStateChange:event => {
+              if (event.data === YT.PlayerState.PLAYING) { isPlaying = true; lastSample = Number(player.getCurrentTime() || 0); }
+              if ([YT.PlayerState.PAUSED, YT.PlayerState.ENDED].includes(event.data)) {
+                samplePosition(player.getCurrentTime(), player.getDuration());
+                isPlaying = false;
+                lastSample = null;
+                saveProgress(true);
+              }
+            }
+          }
+        });
+      };
+      if (window.YT?.Player) window.onYouTubeIframeAPIReady();
+      else {
+        const script = document.createElement("script");
+        script.src = "https://www.youtube.com/iframe_api";
+        document.head.appendChild(script);
+      }
+    }
+
+    function showError(message) {
+      videoStage.innerHTML = `<div class="video-error"><strong>Videoen kunne ikke åbnes</strong><p>${escapeHtml(message)}</p><a href="portal.html#learning">Tilbage til materialer</a></div>`;
+    }
+
+    (async () => {
+      authState = await requireRole(["student", "parent", "teacher", "admin"]);
+      if (!authState) return;
+      const itemId = new URLSearchParams(location.search).get("item");
+      if (!itemId) {
+        location.replace("portal.html#learning");
+        return;
+      }
+      if (["admin", "teacher"].includes(authState.profile.role)) backLink.href = "resources.html";
+      try {
+        const { data, error } = await supabaseClient.from("learning_items").select("*,classes(name)").eq("id", itemId).single();
+        if (error || !data) throw new Error("Materialet findes ikke eller er ikke tilgængeligt for denne konto.");
+        item = data;
+        const provider = providerFor(item);
+        if (!provider) throw new Error("Dette materiale er ikke registreret som en videolektion.");
+        videoTitle.textContent = item.title;
+        videoDescription.textContent = item.description || "Se lektionen i dit eget tempo.";
+        className.textContent = item.classes?.name || "Videolektion";
+        document.title = `${item.title} — Substans`;
+        await loadProgress();
+        loading.remove();
+        app.hidden = false;
+        if (provider === "youtube") renderYouTubeVideo(youtubeId(item.resource_url));
+        else await renderUploadedVideo();
+      } catch (error) {
+        loading.remove();
+        app.hidden = false;
+        showError(error.message || "Prøv igen senere.");
+      }
+    })();
+
+    window.addEventListener("pagehide", () => { if (isPlaying) saveProgress(true); });
+  </script>
+</body>
+</html>

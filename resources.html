@@ -25,7 +25,19 @@
     .attachment-info{min-width:0;flex:1}
     .attachment-name{display:block;font-weight:750;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .attachment-size{font-size:12px;color:var(--muted)}
+    .video-insights{display:grid;gap:12px;padding:14px;border:1px solid #c9d9d0;border-radius:13px;background:#f4f8f5}
+    .video-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+    .video-summary div{padding:10px;border-radius:10px;background:#fff;border:1px solid var(--line)}
+    .video-summary strong{display:block;font-size:20px;color:var(--brand)}
+    .video-summary span{font-size:12px;color:var(--muted)}
+    .video-details summary{cursor:pointer;font-weight:800;color:var(--brand)}
+    .video-students{display:grid;gap:8px;margin-top:11px}
+    .video-student{display:grid;grid-template-columns:minmax(0,1fr) 90px 110px;gap:10px;align-items:center;padding:10px;background:#fff;border:1px solid var(--line);border-radius:10px}
+    .mini-progress{height:7px;border-radius:99px;background:#e3e9e5;overflow:hidden}.mini-progress span{display:block;height:100%;background:var(--brand)}
+    .video-complete{color:#26653a;font-size:12px;font-weight:800}.video-pending{color:var(--muted);font-size:12px;font-weight:750}
+    .field-help{font-size:12px;color:var(--muted);margin:6px 0 0}
     @media(max-width:950px){.resource-layout{grid-template-columns:1fr}}
+    @media(max-width:620px){.video-summary{grid-template-columns:1fr}.video-student{grid-template-columns:1fr}.video-student>span{text-align:left!important}}
   </style>
 </head>
 <body>
@@ -86,7 +98,7 @@
             </div>
             <div class="field"><label for="title">Titel</label><input id="title" required placeholder="F.eks. Refleksionsopgave om Sīrah"></div>
             <div class="field"><label for="description">Beskrivelse</label><textarea id="description" rows="4" placeholder="Hvad skal eleverne læse eller gøre?"></textarea></div>
-            <div class="field"><label for="resourceUrl">Link</label><input id="resourceUrl" type="url" placeholder="https://…"></div>
+            <div class="field"><label for="resourceUrl">Link eller YouTube-video</label><input id="resourceUrl" type="url" placeholder="https://youtube.com/watch?v=…"><p class="field-help">Indsæt blot YouTube-linket. Videoen bliver afspillet og målt inde i Campus.</p></div>
             <div class="field file-drop">
               <label for="attachment">Vedhæft fil</label>
               <input id="attachment" type="file">
@@ -107,6 +119,9 @@
   <script>
     let classes = [];
     let resources = [];
+    let students = [];
+    let enrollments = [];
+    let videoProgress = [];
     let activeFilter = "all";
 
     function showStatus(message, type) {
@@ -123,6 +138,69 @@
       const units = ["B", "KB", "MB", "GB"];
       const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
       return `${(bytes / Math.pow(1024, index)).toFixed(index ? 1 : 0)} ${units[index]}`;
+    }
+
+    function youtubeId(value) {
+      if (!value) return null;
+      try {
+        const url = new URL(value);
+        const host = url.hostname.replace(/^www\./, "");
+        if (host === "youtu.be") return url.pathname.split("/").filter(Boolean)[0] || null;
+        if (["youtube.com", "m.youtube.com", "music.youtube.com"].includes(host)) {
+          if (url.searchParams.get("v")) return url.searchParams.get("v");
+          const parts = url.pathname.split("/").filter(Boolean);
+          if (["embed", "shorts", "live"].includes(parts[0])) return parts[1] || null;
+        }
+      } catch (_) {}
+      return null;
+    }
+
+    function providerFor(item) {
+      if (item.video_provider) return item.video_provider;
+      if (youtubeId(item.resource_url)) return "youtube";
+      if ((item.file_type || "").startsWith("video/")) return "uploaded";
+      return null;
+    }
+
+    function progressPercent(row) {
+      if (!row || !Number(row.duration_seconds)) return 0;
+      return Math.min(100, Math.round(Number(row.watched_seconds || 0) / Number(row.duration_seconds) * 100));
+    }
+
+    function formatWatchTime(seconds) {
+      const value = Math.max(0, Math.round(Number(seconds || 0)));
+      const minutes = Math.floor(value / 60);
+      const rest = value % 60;
+      return minutes ? `${minutes} min ${rest ? `${rest} sek` : ""}`.trim() : `${rest} sek`;
+    }
+
+    function videoInsights(item) {
+      const classStudentIds = enrollments.filter(row => row.class_id === item.class_id).map(row => row.student_id);
+      const itemProgress = videoProgress.filter(row => row.learning_item_id === item.id && classStudentIds.includes(row.student_id));
+      const started = itemProgress.filter(row => Number(row.watched_seconds) > 0).length;
+      const completed = itemProgress.filter(row => row.completed_at || progressPercent(row) >= 90).length;
+      const average = classStudentIds.length
+        ? Math.round(classStudentIds.reduce((sum, studentId) => sum + progressPercent(itemProgress.find(row => row.student_id === studentId)), 0) / classStudentIds.length)
+        : 0;
+      const rows = classStudentIds.map(studentId => {
+        const student = students.find(row => row.id === studentId);
+        const progress = itemProgress.find(row => row.student_id === studentId);
+        const percent = progressPercent(progress);
+        const lastSeen = progress?.last_watched_at ? new Date(progress.last_watched_at).toLocaleString("da-DK", {dateStyle:"medium", timeStyle:"short"}) : "Ikke startet";
+        return `<div class="video-student">
+          <div><strong>${escapeHtml(student?.full_name || "Elev")}</strong><div class="mini-progress" aria-label="${percent} procent set"><span style="width:${percent}%"></span></div></div>
+          <span style="text-align:right"><b>${percent}%</b><br><small class="muted">${escapeHtml(formatWatchTime(progress?.watched_seconds))}</small></span>
+          <span class="${percent >= 90 ? "video-complete" : "video-pending"}">${percent >= 90 ? "Gennemført" : escapeHtml(lastSeen)}</span>
+        </div>`;
+      }).join("");
+      return `<div class="video-insights">
+        <div class="video-summary">
+          <div><strong>${started}/${classStudentIds.length}</strong><span>har startet</span></div>
+          <div><strong>${average}%</strong><span>set i gennemsnit</span></div>
+          <div><strong>${completed}</strong><span>har gennemført</span></div>
+        </div>
+        <details class="video-details"><summary>Se hver elevs visning</summary><div class="video-students">${rows || '<span class="muted">Der er ingen elever på holdet.</span>'}</div></details>
+      </div>`;
     }
 
     async function signedFileUrl(path) {
@@ -144,6 +222,7 @@
         const itemClass = classes.find(entry => entry.id === item.class_id);
         const due = item.due_date ? new Date(item.due_date + "T12:00:00").toLocaleDateString("da-DK") : null;
         const fileUrl = signedUrls[index];
+        const videoProvider = providerFor(item);
         return `<article class="card resource-card">
           <div class="resource-head">
             <div><span class="eyebrow">${escapeHtml(kindLabel(item.kind))}</span><h2 class="section-title">${escapeHtml(item.title)}</h2></div>
@@ -151,6 +230,7 @@
           </div>
           <div class="resource-meta">
             <span>${escapeHtml(kindLabel(item.kind))}</span>
+            ${videoProvider ? `<span>Videolektion</span>` : ""}
             ${due ? `<span>Frist ${escapeHtml(due)}</span>` : ""}
           </div>
           ${item.description ? `<p class="muted">${escapeHtml(item.description)}</p>` : ""}
@@ -161,8 +241,9 @@
             </div>
             ${fileUrl ? `<a class="button secondary" href="${escapeHtml(fileUrl)}" target="_blank" rel="noopener">Åbn fil</a>` : `<span class="muted">Kan ikke åbnes</span>`}
           </div>` : ""}
+          ${videoProvider ? videoInsights(item) : ""}
           <div class="resource-actions">
-            ${item.resource_url ? `<a class="button secondary" href="${escapeHtml(item.resource_url)}" target="_blank" rel="noopener">Åbn link</a>` : ""}
+            ${videoProvider ? `<a class="button" href="video.html?item=${escapeHtml(item.id)}">Afspil og test video</a>` : (item.resource_url ? `<a class="button secondary" href="${escapeHtml(item.resource_url)}" target="_blank" rel="noopener">Åbn link</a>` : "")}
             ${item.kind === "homework" ? `<a class="button secondary" href="assignments.html">Se afleveringer</a>` : ""}
             <button class="delete-button" type="button" data-delete-id="${escapeHtml(item.id)}">Slet</button>
           </div>
@@ -171,16 +252,22 @@
     }
 
     async function loadData() {
-      const [classResult, resourceResult] = await Promise.all([
+      const [classResult, resourceResult, studentResult, enrollmentResult, videoProgressResult] = await Promise.all([
         supabaseClient.from("classes").select("id,name").order("name"),
-        supabaseClient.from("learning_items").select("*").order("created_at", { ascending:false })
+        supabaseClient.from("learning_items").select("*").order("created_at", { ascending:false }),
+        supabaseClient.from("students").select("id,full_name").order("full_name"),
+        supabaseClient.from("class_enrollments").select("class_id,student_id"),
+        supabaseClient.from("video_watch_progress").select("*").order("last_watched_at", { ascending:false })
       ]);
-      if (classResult.error || resourceResult.error) {
+      if (classResult.error || resourceResult.error || studentResult.error || enrollmentResult.error || videoProgressResult.error) {
         resourceList.innerHTML = '<article class="card empty">Materialerne kunne ikke hentes. Kontrollér modulets databaseopsætning.</article>';
         return;
       }
       classes = classResult.data || [];
       resources = resourceResult.data || [];
+      students = studentResult.data || [];
+      enrollments = enrollmentResult.data || [];
+      videoProgress = videoProgressResult.data || [];
       await render();
     }
 
@@ -218,6 +305,7 @@
       }
 
       createButton.textContent = "Gemmer…";
+      const detectedVideoProvider = youtubeId(resourceUrl.value.trim()) ? "youtube" : (file?.type?.startsWith("video/") ? "uploaded" : null);
       const { error } = await supabaseClient.from("learning_items").insert({
         class_id: classId.value,
         kind: kind.value,
@@ -228,6 +316,7 @@
         file_name: file?.name || null,
         file_type: file?.type || null,
         file_size: file?.size || null,
+        video_provider: detectedVideoProvider,
         due_date: kind.value === "homework" && dueDate.value ? dueDate.value : null
       });
       if (error) {

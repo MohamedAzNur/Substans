@@ -9,6 +9,7 @@ Offentlig hjemmeside og Substans Campus V3.
 - `admin.html` — rollebeskyttet administration af ansøgninger
 - `portal.html` — portal for elev, forælder og underviser
 - `reminders.html` — indstillinger og historik for automatiske lektionspåmindelser
+- `video.html` — sikker videoafspiller med elevens faktiske seertid og fortsæt-funktion
 - `supabase-v3.sql` — profiles-tabel, roller og RLS-politikker
 
 ## Aktivering
@@ -24,5 +25,13 @@ Kør `reminder-agent-setup.sql` i Supabase SQL Editor på en eksisterende V3-ins
 Agenten kontrollerer undervisningsplanen hvert femte minut og sender som standard en
 intern holdbesked tre timer før undervisningen. Tidspunkt og tekst kan ændres pr. hold
 på `reminders.html`. Samme hold får højst én automatisk påmindelse pr. undervisningsdag.
+
+## Videolektioner og seertid
+
+Kør `video-tracking-setup.sql` i Supabase SQL Editor på en eksisterende V3-installation.
+Underviseren kan derefter indsætte et YouTube-link eller uploade en videofil på
+`resources.html`. Elevens faktisk afspillede intervaller, samlede procent, seneste
+position og gennemført-status gemmes i `video_watch_progress`. Forældre har læseadgang,
+mens kun elevens egen konto kan skrive fremgang.
 
 Production er ikke ændret, før branchen merges til `main`.
